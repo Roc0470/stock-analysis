@@ -286,22 +286,33 @@ class ReportGenerator:
                 <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">A股每日短线雷达 · 新手买卖时机导航</h1>
             </div>
             <div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-300">
-                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">总资金设定: ¥21,000</span>
-                <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-medium">适合股价: ¥3.0 ~ ¥35.0</span>
-                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">单笔仓位: 约 ¥4,500 (20%~25%)</span>
-                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">最多持仓: 2~3 只</span>
+                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">总资金: ¥21,000</span>
+                <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-medium">适合股价: ¥3.5 ~ ¥35.0</span>
+                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">单笔仓位: 约 ¥5,000~¥6,000 (25%~28%)</span>
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">最多持仓: 2 只 (保留 40%+ 现金)</span>
             </div>
         </div>
-        <div class="flex items-center gap-3">
-            <div class="text-right">
+        <div class="flex flex-wrap items-center gap-2.5">
+            <div class="text-right mr-1">
                 <div class="text-xs text-slate-400">报告生成时间 (北京时间)</div>
                 <div class="text-sm font-bold text-amber-300 font-mono">{report_date}</div>
             </div>
-            <button onclick="window.location.reload(true)" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">
+            <!-- 云端即时重算按钮 -->
+            <button id="btn-cloud-run" onclick="triggerCloudScan()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-red-500/25 active:scale-95 transition cursor-pointer">
+                <span id="run-icon">⚡</span>
+                <span id="run-text">云端一键重算 (Run)</span>
+            </button>
+            <!-- 强制刷新 -->
+            <button onclick="forceRefresh()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition cursor-pointer">
                 🔄 刷新最新
             </button>
-            <button onclick="window.print()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">
-                🖨️ 打印 / 存为PDF
+            <!-- 密钥配置 -->
+            <button onclick="openTokenModal()" title="设置/修改 GitHub Token" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 transition cursor-pointer">
+                ⚙️
+            </button>
+            <!-- 打印 -->
+            <button onclick="window.print()" class="hidden sm:inline-block px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition cursor-pointer">
+                🖨️ 打印
             </button>
         </div>
     </header>
@@ -381,12 +392,265 @@ class ReportGenerator:
         <p>股市有风险，入市需谨慎。A股实行 T+1 交易与涨跌幅限制，请务必根据自身风险承受能力独立决策。</p>
     </footer>
 
+    <!-- Token 设置弹窗 -->
+    <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-left">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-base font-bold text-white flex items-center gap-2"><span>🔑</span> GitHub Token 配置</h3>
+                <button onclick="closeTokenModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                用于在网页端一键调用云端 GitHub Actions 重新运行量化选股模型。Token 仅保存在当前浏览器的 localStorage 中，绝不泄露。
+            </p>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1.5 font-medium">Personal Access Token (需勾选 workflow 权限):</label>
+                <input id="input-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-amber-400" />
+            </div>
+            <div class="flex items-center justify-between pt-2">
+                <button onclick="clearToken()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-slate-200 transition">清空已存密钥</button>
+                <div class="flex gap-2">
+                    <button onclick="closeTokenModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">取消</button>
+                    <button onclick="saveToken()" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-xs font-bold text-white shadow-lg shadow-amber-500/20">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 云端重算进度弹窗 -->
+    <div id="countdown-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+        <div class="bg-slate-900 border border-amber-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl text-center space-y-5">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl animate-pulse">
+                ⚡
+            </div>
+            <div>
+                <h3 id="modal-title" class="text-xl font-black text-white tracking-wide">云端量化引擎运算中...</h3>
+                <p id="modal-desc" class="text-xs text-slate-300 mt-2 leading-relaxed">
+                    已向 GitHub Actions 云端服务器下发即时扫描指令。<br/>
+                    正在拉取两市 400 只主板高流动性个股、执行五重防诱多排雷与 ATR(14) 动态风控测算。
+                </p>
+            </div>
+            
+            <!-- 进度条 -->
+            <div class="w-full bg-slate-800 rounded-full h-3.5 overflow-hidden border border-slate-700 p-0.5">
+                <div id="progress-bar" class="bg-gradient-to-r from-amber-500 via-red-500 to-emerald-500 h-full rounded-full transition-all duration-1000 ease-linear" style="width: 5%"></div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
+                <span id="modal-status">状态: <strong class="text-amber-400">正在计算...</strong></span>
+                <span>预计剩余: <strong id="cd-seconds" class="text-amber-300 text-base font-bold">35</strong> 秒</span>
+            </div>
+
+            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
+                <a href="https://github.com/Roc0470/stock-analysis/actions" target="_blank" class="text-slate-400 hover:text-slate-200 underline">查看 GitHub Actions 运行日志</a>
+                <button onclick="forceRefresh()" class="text-amber-400 hover:underline font-medium">跳过等待 · 立即刷新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作提示 Toast -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 transition-all">
+        <span id="toast-icon"></span>
+        <span id="toast-msg"></span>
+    </div>
+
+    <script>
+        const REPO_OWNER = "Roc0470";
+        const REPO_NAME = "stock-analysis";
+        const WORKFLOW_ID = "daily_radar.yml";
+
+        function getSavedToken() {{
+            return localStorage.getItem('gh_stock_token') || "";
+        }}
+
+        function showToast(msg, type = "info") {{
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const text = document.getElementById('toast-msg');
+            
+            if (type === "success") {{
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-emerald-950/90 border-emerald-500 text-emerald-200";
+                icon.textContent = "✅";
+            }} else if (type === "error") {{
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-red-950/90 border-red-500 text-red-200";
+                icon.textContent = "❌";
+            }} else {{
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-slate-800 border-slate-700 text-slate-200";
+                icon.textContent = "ℹ️";
+            }}
+
+            text.textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => {{
+                toast.classList.add('hidden');
+            }}, 4000);
+        }}
+
+        function forceRefresh() {{
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.location.href = cleanUrl + '?v=' + Date.now();
+        }}
+
+        function openTokenModal() {{
+            const current = localStorage.getItem('gh_stock_token') || "";
+            document.getElementById('input-token').value = current;
+            document.getElementById('token-modal').classList.remove('hidden');
+        }}
+
+        function closeTokenModal() {{
+            document.getElementById('token-modal').classList.add('hidden');
+        }}
+
+        function saveToken() {{
+            const val = document.getElementById('input-token').value.trim();
+            if (val) {{
+                localStorage.setItem('gh_stock_token', val);
+                showToast("Token 已成功保存至本地！", "success");
+            }} else {{
+                localStorage.removeItem('gh_stock_token');
+                showToast("已恢复默认内置 Token", "info");
+            }}
+            closeTokenModal();
+        }}
+
+        function clearToken() {{
+            localStorage.removeItem('gh_stock_token');
+            document.getElementById('input-token').value = "";
+            showToast("已清空保存的 Token", "info");
+            closeTokenModal();
+        }}
+
+        let countdownInterval = null;
+        let pollInterval = null;
+
+        async function triggerCloudScan() {{
+            const btn = document.getElementById('btn-cloud-run');
+            const icon = document.getElementById('run-icon');
+            const text = document.getElementById('run-text');
+            const token = getSavedToken();
+
+            if (!token) {{
+                openTokenModal();
+                return;
+            }}
+
+            // 禁用按钮并展示加载动画
+            btn.disabled = true;
+            btn.classList.add('opacity-75');
+            icon.textContent = "⏳";
+            text.textContent = "正在下发指令...";
+
+            const url = `https://api.github.com/repos/${{REPO_OWNER}}/${{REPO_NAME}}/actions/workflows/${{WORKFLOW_ID}}/dispatches`;
+
+            try {{
+                const res = await fetch(url, {{
+                    method: 'POST',
+                    headers: {{
+                        'Accept': 'application/vnd.github+json',
+                        'Authorization': 'token ' + token,
+                        'Content-Type': 'application/json'
+                    }},
+                    body: JSON.stringify({{ ref: 'main' }})
+                }});
+
+                if (res.status === 204) {{
+                    // 触发成功，弹出倒计时与进度监听弹窗
+                    startCountdownAndWatch(token);
+                }} else if (res.status === 401 || res.status === 403) {{
+                    showToast("Token 权限不足或已失效，请重新设置！", "error");
+                    openTokenModal();
+                    resetButton();
+                }} else {{
+                    const err = await res.json().catch(() => ({{}}));
+                    showToast("触发失败: " + (err.message || res.statusText), "error");
+                    resetButton();
+                }}
+            }} catch (e) {{
+                showToast("网络请求异常: " + e.message, "error");
+                resetButton();
+            }}
+        }}
+
+        function resetButton() {{
+            const btn = document.getElementById('btn-cloud-run');
+            const icon = document.getElementById('run-icon');
+            const text = document.getElementById('run-text');
+            btn.disabled = false;
+            btn.classList.remove('opacity-75');
+            icon.textContent = "⚡";
+            text.textContent = "云端一键重算 (Run)";
+        }}
+
+        function startCountdownAndWatch(token) {{
+            const modal = document.getElementById('countdown-modal');
+            const bar = document.getElementById('progress-bar');
+            const cdNum = document.getElementById('cd-seconds');
+            const statusEl = document.getElementById('modal-status');
+            const descEl = document.getElementById('modal-desc');
+
+            modal.classList.remove('hidden');
+
+            const totalSeconds = 36;
+            let remaining = totalSeconds;
+            const startTime = Date.now();
+
+            if (countdownInterval) clearInterval(countdownInterval);
+            if (pollInterval) clearInterval(pollInterval);
+
+            countdownInterval = setInterval(() => {{
+                remaining--;
+                if (remaining < 0) remaining = 0;
+                cdNum.textContent = remaining;
+
+                const pct = Math.min(95, Math.round(((totalSeconds - remaining) / totalSeconds) * 95));
+                bar.style.width = pct + "%";
+
+                if (remaining <= 0) {{
+                    clearInterval(countdownInterval);
+                    statusEl.innerHTML = '<strong class="text-emerald-400">完成！正在载入...</strong>';
+                    bar.style.width = "100%";
+                    setTimeout(forceRefresh, 1500);
+                }}
+            }}, 1000);
+
+            // 在第 18 秒后开始向 GitHub API 轮询最新运行状态
+            setTimeout(() => {{
+                pollInterval = setInterval(async () => {{
+                    try {{
+                        const runRes = await fetch(`https://api.github.com/repos/${{REPO_OWNER}}/${{REPO_NAME}}/actions/runs?per_page=1`, {{
+                            headers: {{
+                                'Accept': 'application/vnd.github+json',
+                                'Authorization': 'token ' + token
+                            }}
+                        }});
+                        if (runRes.ok) {{
+                            const data = await runRes.json();
+                            const latest = data.workflow_runs && data.workflow_runs[0];
+                            if (latest) {{
+                                const runTime = new Date(latest.created_at).getTime();
+                                if (runTime >= startTime - 15000 && latest.status === 'completed') {{
+                                    clearInterval(countdownInterval);
+                                    clearInterval(pollInterval);
+                                    statusEl.innerHTML = '<strong class="text-emerald-400">运算成功！</strong>';
+                                    descEl.textContent = '🎉 GitHub 云端计算已顺利完成，最新报告部署就绪！';
+                                    bar.style.width = "100%";
+                                    cdNum.textContent = "0";
+                                    setTimeout(forceRefresh, 1200);
+                                }}
+                            }}
+                        }}
+                    }} catch (err) {{
+                        // 静默失败，继续依靠本地倒计时
+                    }}
+                }}, 4000);
+            }}, 18000);
+        }}
+    </script>
 </body>
 </html>
 '''
         # 写入 latest 报告以及按日归档的报告
         latest_file = os.path.join(self.output_dir, "daily_report.html")
-        date_str = datetime.now().strftime("%Y%m%d")
+        date_str = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
         archive_file = os.path.join(self.output_dir, f"report_{date_str}.html")
 
         with open(latest_file, "w", encoding="utf-8") as f:

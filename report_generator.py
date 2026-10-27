@@ -5,7 +5,9 @@ A股每日量化选股与买卖时机可视化报告生成器
 """
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 class ReportGenerator:
     def __init__(self, output_dir="reports"):
@@ -90,7 +92,7 @@ class ReportGenerator:
     def generate_html_report(self, indices, recommended_stocks, report_date=None):
         """生成高颜值独立 HTML 报告"""
         if report_date is None:
-            report_date = datetime.now().strftime("%Y年%m月%d日 %H:%M")
+            report_date = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日 %H:%M")
 
         market_env = self.assess_market_temperature(indices)
 
@@ -259,6 +261,9 @@ class ReportGenerator:
 <html lang="zh-CN" class="dark">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>A股每日短线雷达与买卖点分析 - {report_date}</title>
     <!-- Tailwind CSS CDN -->
@@ -289,9 +294,12 @@ class ReportGenerator:
         </div>
         <div class="flex items-center gap-3">
             <div class="text-right">
-                <div class="text-xs text-slate-400">报告生成时间</div>
-                <div class="text-sm font-bold text-slate-200 font-mono">{report_date}</div>
+                <div class="text-xs text-slate-400">报告生成时间 (北京时间)</div>
+                <div class="text-sm font-bold text-amber-300 font-mono">{report_date}</div>
             </div>
+            <button onclick="window.location.reload(true)" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">
+                🔄 刷新最新
+            </button>
             <button onclick="window.print()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">
                 🖨️ 打印 / 存为PDF
             </button>

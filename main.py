@@ -10,7 +10,9 @@ A股每日量化选股与买卖时机分析系统 (V2.0 实战严选版) - 主�
 import os
 import sys
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 from data_fetcher import AShareDataFetcher
 from strategy_engine import ShortTermTrendStrategy
@@ -22,7 +24,7 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
     print("=" * 68)
     print("   📊 A股每日短线雷达 V2.0 (主板严选 · 防诱多 · ATR动态风控)")
     print(f"   账户本金: ¥{config.TOTAL_CAPITAL:,.0f} 元 | 严选沪深主板 | 股价区间: ¥{config.MIN_STOCK_PRICE} ~ ¥{config.MAX_STOCK_PRICE}")
-    print(f"   运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"   运行时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
     print("=" * 68)
 
     fetcher = AShareDataFetcher()
@@ -72,7 +74,7 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
         print(f"     ⚖️ 盈亏比: {st['risk_reward_ratio']}:1 | 建议建仓: {st['suggest_shares']}股 ({st['suggest_lots']}手, 约¥{st['suggest_cost']:,.0f}元)")
 
     # 4. 生成可视化 HTML 分析报告
-    html_file = generator.generate_html_report(indices, top_recommendations)
+    html_file = generator.generate_html_report(indices, top_recommendations, datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日 %H:%M"))
     print("\n" + "=" * 68)
     print(f"🎉 V2.0 可视化分析报告已同步更新至桌面！")
     print(f"📄 桌面报告路径: {html_file}")

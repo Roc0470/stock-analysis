@@ -1,6 +1,8 @@
 name: A-Share Daily Quant Radar
 
 on:
+  push:
+    branches: [ main ]
   schedule:
     # 国际标准时间 (UTC) 对应 北京时间 (UTC+8):
     # UTC 01:15 -> 北京时间 09:15 (周一至周五 盘前筛选)

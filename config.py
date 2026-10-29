@@ -42,6 +42,7 @@ MIN_RISK_REWARD = 1.6     # 最低盈亏比要求 (潜在收益必须 >= 1.6 倍
 SCAN_POOL_COUNT = 400     # 扫描全市场成交额前 400 名活跃股 (较旧版扩大 5 倍视野)
 TOP_RECOMMEND_COUNT = 5   # 每日严选 TOP 5 精品（宁缺毋滥）
 
-# 8. 微信推送配置 (PushPlus 推送加)
-# 每日扫描完成后，自动将严选结果和买卖点推送到您的微信
-PUSHPLUS_TOKEN = "3055b67348e54de8a45a1ad09507aed0"
+# 8. 微信主动推送配置 (Server酱 Turbo 官方服务号)
+# 盘中一旦触碰止盈止损或出现异动，秒级主动向您的微信发送震动通知
+SERVERCHAN_KEY = "SCT454835Tc06HjmlgGNfw3aSS0IBXY5Iv"
+PUSHPLUS_TOKEN = ""

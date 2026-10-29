@@ -1,0 +1,24 @@
+name: Realtime Portfolio Monitor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install requests
+
+      - name: 运行实时盯盘与主动微信报警机器人
+        run: |
+          python realtime_monitor.py

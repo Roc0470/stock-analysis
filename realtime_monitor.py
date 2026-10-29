@@ -13,10 +13,13 @@ import sys
 from datetime import datetime, timezone, timedelta
 import requests
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+
 BEIJING_TZ = timezone(timedelta(hours=8))
 
-# 当前实盘监控持仓名单与风控底线
-MONITOR_HOLDINGS = [
+# 当前实盘监控持仓名单与风控底线 (默认后备)
+DEFAULT_HOLDINGS = [
     {
         'symbol': 'sz002129',
         'code': '002129',
@@ -38,6 +41,32 @@ MONITOR_HOLDINGS = [
         'shares': 100
     }
 ]
+
+def get_active_holdings():
+    """动态读取由同花顺一键同步的 portfolio.json 活跃持仓"""
+    p_file = os.path.join(os.path.dirname(__file__), "portfolio.json")
+    if os.path.exists(p_file):
+        try:
+            import json
+            with open(p_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data and isinstance(data, list):
+                    res = []
+                    for d in data:
+                        res.append({
+                            'symbol': d['symbol'],
+                            'code': d['code'],
+                            'name': d['name'],
+                            'cost': d['cost'],
+                            'stop_loss': d.get('stop_loss', round(d['cost'] * 0.95, 2)),
+                            'take_profit': d.get('take_profit', round(d['cost'] * 1.08, 2)),
+                            'warn_pullback': 2.5,
+                            'shares': d.get('shares', 100)
+                        })
+                    return res
+        except Exception:
+            pass
+    return DEFAULT_HOLDINGS
 
 class RealTimeMonitor:
     def __init__(self, check_interval=20):
@@ -107,9 +136,25 @@ class RealTimeMonitor:
             except Exception:
                 pass
 
+    def check_clipboard_sync(self):
+        """若检测到用户在同花顺中执行了复制操作，全自动静默捕获并同步更新持仓"""
+        try:
+            import sync_portfolio
+            text = sync_portfolio.get_clipboard_text()
+            if text and ('证券代码' in text or '股票代码' in text) and text != getattr(self, '_last_cb_text', ''):
+                self._last_cb_text = text
+                print(f"[{datetime.now(BEIJING_TZ).strftime('%H:%M:%S')}] 📋 捕获到同花顺持仓复制事件，全自动智能同步中...")
+                sync_portfolio.sync_now(text)
+        except Exception:
+            pass
+
     def check_portfolio(self):
         """执行单次持仓价格拉取与风控比对"""
-        symbols = [h['symbol'] for h in MONITOR_HOLDINGS]
+        self.check_clipboard_sync()
+        holdings = get_active_holdings()
+        symbols = [h['symbol'] for h in holdings]
+        if not symbols:
+            return
         url = f"http://hq.sinajs.cn/list={','.join(symbols)}"
         try:
             r = self.session.get(url, headers=self.headers, timeout=6)
@@ -129,7 +174,7 @@ class RealTimeMonitor:
             if len(data) < 10:
                 continue
 
-            cfg = next((h for h in MONITOR_HOLDINGS if h['symbol'] == sym), None)
+            cfg = next((h for h in holdings if h['symbol'] == sym), None)
             if not cfg:
                 continue
 
@@ -178,9 +223,10 @@ class RealTimeMonitor:
                     self.send_wechat_alert(title, msg)
 
     def run_forever(self, auto_exit_at_close=True):
+        holdings = get_active_holdings()
         print("=" * 68)
         print("   🤖 A股持仓实盘毫秒级盯盘机器人启动")
-        print(f"   监控标的: {', '.join([h['name'] for h in MONITOR_HOLDINGS])}")
+        print(f"   监控标的: {', '.join([h['name'] for h in holdings])}")
         print(f"   刷新频率: 每 {self.interval} 秒自动比对一次盘口")
         print("   报警方式: Windows 弹窗提示音 + 微信主动推送 (触碰自动报警)")
         print("=" * 68)

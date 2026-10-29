@@ -46,3 +46,9 @@ TOP_RECOMMEND_COUNT = 5   # 每日严选 TOP 5 精品（宁缺毋滥）
 # 盘中一旦触碰止盈止损或出现异动，秒级主动向您的微信发送震动通知
 SERVERCHAN_KEY = "SCT454835Tc06HjmlgGNfw3aSS0IBXY5Iv"
 PUSHPLUS_TOKEN = ""
+
+# 9. 电脑端报警提示音模式
+# 'silent': 纯静音模式 (仅在桌面右下角弹出优雅气泡提示框，不发出任何声音，推荐！)
+# 'soft'  : 柔和轻声 (使用 Windows 原生轻柔的邮件水滴轻音)
+# 'loud'  : 蜂鸣重音
+ALERT_SOUND_MODE = "silent"

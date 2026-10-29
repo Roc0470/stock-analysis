@@ -84,14 +84,32 @@ class RealTimeMonitor:
         h_m = now.hour * 100 + now.minute
         return (925 <= h_m <= 1135) or (1255 <= h_m <= 1505)
 
-    def send_windows_notification(self, title, message):
-        """调用 Windows 原生通知弹窗与提示音"""
+    def play_alert_sound(self):
+        """根据用户偏好播放柔和轻音或保持纯静音"""
+        import config
+        mode = getattr(config, 'ALERT_SOUND_MODE', 'silent').lower()
+        if mode == 'silent':
+            return  # 纯静音模式：不发出任何刺耳声音，仅弹窗提醒
+
         try:
-            # 播放 Windows 系统提示音
             import winsound
-            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            if mode == 'soft':
+                # Windows 官方轻柔水滴/邮件提示音
+                soft_wav = r"C:\Windows\Media\Windows Notify Messaging.wav"
+                if not os.path.exists(soft_wav):
+                    soft_wav = r"C:\Windows\Media\Windows Notify Email.wav"
+                if os.path.exists(soft_wav):
+                    winsound.PlaySound(soft_wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                else:
+                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
+            elif mode == 'loud':
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
         except Exception:
             pass
+
+    def send_windows_notification(self, title, message):
+        """调用 Windows 原生通知弹窗（静音/柔和可选）"""
+        self.play_alert_sound()
 
         try:
             # 使用 PowerShell 原生触发 Windows 气泡通知 (免安装第三方库)

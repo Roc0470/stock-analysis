@@ -17,7 +17,6 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 from data_fetcher import AShareDataFetcher
 from strategy_engine import ShortTermTrendStrategy
 from report_generator import ReportGenerator
-from mobile_server import start_mobile_server_background, print_terminal_qr, get_local_ip
 import config
 
 def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_COUNT, auto_open=True):
@@ -79,19 +78,6 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
     print(f"🎉 V2.0 可视化分析报告已同步更新至桌面！")
     print(f"📄 桌面报告路径: {html_file}")
     print("=" * 68)
-
-    # 5. 开启局域网手机查看服务与生成二维码
-    print("\n[5/5] 正在生成【手机扫码即看】服务...")
-    mobile_url, qr_file = start_mobile_server_background(8888)
-    if mobile_url:
-        print(f"  📱 手机看盘链接 (同一Wi-Fi下直接打开): {mobile_url}")
-        if qr_file:
-            print(f"  🖼️ 桌面二维码已生成: {qr_file} (手机扫此图即可秒开)")
-        print("\n  👇 手机微信 / 相机扫码直达 (需连接同一Wi-Fi)：")
-        try:
-            print_terminal_qr(mobile_url)
-        except Exception:
-            pass
 
     if auto_open:
         print("🚀 正在自动在默认浏览器中打开分析报告...")

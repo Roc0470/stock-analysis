@@ -224,7 +224,11 @@ class RealTimeMonitor:
                 if time.time() - self.alert_history.get(alert_key, 0) > 300:
                     self.alert_history[alert_key] = time.time()
                     title = f"🎯【止盈达标】{name} 已达到目标价 ¥{cfg['take_profit']}！"
-                    msg = f"{name}({cfg['code']}) 现价已大涨至 ¥{cur:.2f}！达到第一止盈目标 ¥{cfg['take_profit']}，请在同花顺卖出一半锁定利润！"
+                    if cfg['shares'] <= 100:
+                        action_desc = "达到目标价，持仓仅剩 100 股底仓，建议在同花顺【全部清仓落袋】锁定全部利润！"
+                    else:
+                        action_desc = f"达到第一止盈目标 ¥{cfg['take_profit']}，请在同花顺【卖出一半锁定利润】！"
+                    msg = f"{name}({cfg['code']}) 现价已大涨至 ¥{cur:.2f}！{action_desc}"
                     print(f"\n>>> {title}\n{msg}\n")
                     self.send_windows_notification(title, msg)
                     self.send_wechat_alert(title, msg)

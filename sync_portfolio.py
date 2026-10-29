@@ -60,13 +60,23 @@ def parse_ths_table(text):
                     market_p = float(parts[code_idx + 6])
                     prefix = 'sh' if code.startswith(('60', '68')) else 'sz'
                     
-                    # 智能计算风控底线：若有浮盈则抬高到成本保本线，否则设 ATR/5% 硬止损
-                    if market_p > cost * 1.02:
+                    # 智能计算风控底线与止盈目标：
+                    # 1. 止损线：若持仓有大幅浮盈（比如卖出后成本摊薄或大幅冲高），设动态移动保本线；否则设成本线或5%硬止损
+                    if market_p > cost * 1.05:
+                        # 利润保护线：设在现价回撤 4% 处，且绝不低于真实成本
+                        stop_loss = round(max(cost, market_p * 0.96), 2)
+                    elif market_p > cost * 1.01:
                         stop_loss = round(cost, 2)
                     else:
                         stop_loss = round(cost * 0.952, 2)
 
-                    take_profit = round(cost * 1.08, 2)
+                    # 2. 止盈线：目标价必须高于当前现价！
+                    # 避免因减仓盈利导致成本大幅摊薄后，计算出的成本*1.08反而在现价下方而误触发报警
+                    take_profit = round(max(cost * 1.08, market_p * 1.03), 2)
+                    # 如果原持仓已有更高的目标设定，尽量保留
+                    if code == '600741': # 华域汽车底仓
+                        take_profit = max(take_profit, 16.50)
+                        stop_loss = max(stop_loss, 15.60)
 
                     holdings.append({
                         'symbol': f"{prefix}{code}",

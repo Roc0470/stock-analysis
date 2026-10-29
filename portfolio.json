@@ -5,10 +5,10 @@
     "name": "华域汽车",
     "shares": 100,
     "cost": 14.162,
-    "market_price": 16.21,
-    "stop_loss": 14.16,
-    "take_profit": 15.29,
-    "updated_at": "2026-10-29 14:26:17"
+    "market_price": 16.27,
+    "stop_loss": 15.60,
+    "take_profit": 16.50,
+    "updated_at": "2026-10-29 14:45:00"
   },
   {
     "symbol": "sz002129",
@@ -16,9 +16,9 @@
     "name": "TCL中环",
     "shares": 600,
     "cost": 9.178,
-    "market_price": 9.28,
-    "stop_loss": 8.74,
-    "take_profit": 9.91,
-    "updated_at": "2026-10-29 14:26:17"
+    "market_price": 9.29,
+    "stop_loss": 9.20,
+    "take_profit": 10.11,
+    "updated_at": "2026-10-29 14:45:00"
   }
 ]

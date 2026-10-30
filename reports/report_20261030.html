@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A股每日短线雷达与买卖点分析 - 2026年10月30日 10:32</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #080d1a 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    
+    <!-- 顶部标题栏 -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between pb-6 mb-6 border-b border-slate-800 gap-4">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="inline-block w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
+                <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">A股每日短线雷达 · 新手买卖时机导航</h1>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-300">
+                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">总资金: ¥21,000</span>
+                <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-medium">适合股价: ¥3.5 ~ ¥35.0</span>
+                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">单笔仓位: 约 ¥5,000~¥6,000 (25%~28%)</span>
+                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">最多持仓: 2 只 (保留 40%+ 现金)</span>
+            </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5">
+            <div class="text-right mr-1">
+                <div class="text-xs text-slate-400">报告生成时间 (北京时间)</div>
+                <div class="text-sm font-bold text-amber-300 font-mono">2026年10月30日 10:32</div>
+            </div>
+            <!-- 云端即时重算按钮 -->
+            <button id="btn-cloud-run" onclick="triggerCloudScan()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-red-500/25 active:scale-95 transition cursor-pointer">
+                <span id="run-icon">⚡</span>
+                <span id="run-text">云端一键重算 (Run)</span>
+            </button>
+            <!-- 强制刷新 -->
+            <button onclick="forceRefresh()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition cursor-pointer">
+                🔄 刷新最新
+            </button>
+            <!-- 密钥配置 -->
+            <button onclick="openTokenModal()" title="设置/修改 GitHub Token" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 transition cursor-pointer">
+                ⚙️
+            </button>
+            <!-- 打印 -->
+            <button onclick="window.print()" class="hidden sm:inline-block px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition cursor-pointer">
+                🖨️ 打印
+            </button>
+        </div>
+    </header>
+
+    <!-- 市场环境与温度 -->
+    <section class="mb-8">
+        <div class="bg-slate-800/60 rounded-3xl p-5 border border-slate-700/60 shadow-xl backdrop-blur-md">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl font-bold bg-slate-900 border border-slate-700">
+                        🌡️
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">当前大盘环境判断</div>
+                        <div class="text-lg sm:text-xl font-bold text-white flex items-center gap-2 mt-0.5">
+                            <span>弱势防守 · 谨慎防范回调</span>
+                            <span class="text-xs px-2.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-500 border-emerald-500/30">市场温度 45℃</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="md:max-w-xl text-xs sm:text-sm text-slate-300 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-700/40">
+                    <strong class="text-amber-400">【新手今日操作指南】：</strong>市场整体受压，空方力量占优。新手建议多看少动，严控仓位在 2 成以下或空仓观望，耐心等待止跌企稳信号。
+                </div>
+            </div>
+
+            <!-- 指数网格 -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-5">
+                
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-300 font-medium text-sm">上证指数</span>
+                    <span class="text-xs text-slate-500 font-mono">000001</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono tracking-tight text-white">3620.16</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-500/10 text-emerald-500">
+                        -0.86%
+                    </span>
+                </div>
+                <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                    <span>成交额: 3547.0 亿</span>
+                    <span>-31.27</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-300 font-medium text-sm">深证成指</span>
+                    <span class="text-xs text-slate-500 font-mono">399001</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono tracking-tight text-white">10985.17</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-500/10 text-emerald-500">
+                        -1.37%
+                    </span>
+                </div>
+                <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                    <span>成交额: 4378.8 亿</span>
+                    <span>-153.03</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-300 font-medium text-sm">创业板指</span>
+                    <span class="text-xs text-slate-500 font-mono">399006</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono tracking-tight text-white">2467.31</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-500/10 text-emerald-500">
+                        -2.00%
+                    </span>
+                </div>
+                <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                    <span>成交额: 2194.4 亿</span>
+                    <span>-50.28</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-slate-300 font-medium text-sm">科创50</span>
+                    <span class="text-xs text-slate-500 font-mono">000688</span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono tracking-tight text-white">1191.17</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-500/10 text-emerald-500">
+                        -3.01%
+                    </span>
+                </div>
+                <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                    <span>成交额: 312.8 亿</span>
+                    <span>-36.92</span>
+                </div>
+            </div>
+            
+            </div>
+        </div>
+    </section>
+
+    <!-- 今日推荐股票区 -->
+    <section class="mb-10">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🚀</span>
+                <h2 class="text-xl font-bold text-white tracking-wide">今日精选 · 短线爆发与趋势潜力股 (1只)</h2>
+            </div>
+            <span class="text-xs text-slate-400">已自动剔除 ST、冷门无流动性股及高位狂热妖股</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/70 shadow-xl hover:border-slate-500/50 transition-all flex flex-col gap-4">
+                <!-- 头部信息 -->
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between border-b border-slate-700/50 pb-3 gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">TOP 1</span>
+                            <a href="https://stockpage.10jqka.com.cn/003006/" target="_blank" rel="noopener noreferrer" class="text-xl font-bold text-white tracking-wide hover:text-amber-300 hover:underline flex items-center gap-1.5 transition">
+                                <span>百亚股份</span>
+                                <span class="text-xs text-slate-400 font-mono">(003006)</span>
+                            </a>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                            <span class="px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">突破生命线</span><span class="px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">换手活跃4.74%</span>
+                        </div>
+                        <!-- 直达第三方证券网站快捷通道 -->
+                        <div class="flex flex-wrap items-center gap-2 mt-2.5">
+                            <a href="https://stockpage.10jqka.com.cn/003006/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-600/20 text-red-300 border border-red-500/30 hover:bg-red-600 hover:text-white transition">
+                                <span>🔥 同花顺行情</span>
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                            <a href="https://quote.eastmoney.com/sz003006.html" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600 hover:text-white transition">
+                                <span>📈 东方财富</span>
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                            <a href="https://xueqiu.com/S/SZ003006" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-600/20 text-sky-300 border border-sky-500/30 hover:bg-sky-600 hover:text-white transition">
+                                <span>💬 雪球讨论</span>
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-start">
+                        <div class="text-xs font-medium text-slate-400">严选爆发评分</div>
+                        <div class="text-2xl font-black text-amber-400 font-mono">71.8<span class="text-xs text-slate-400">分</span></div>
+                    </div>
+                </div>
+
+                <!-- 盘面与走势微图 -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900/60 rounded-xl p-3 border border-slate-700/40">
+                    <div>
+                        <div class="text-xs text-slate-400">最新收盘价</div>
+                        <div class="text-lg font-bold font-mono text-white mt-0.5">¥22.97</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">当日涨跌幅</div>
+                        <div class="text-lg font-bold font-mono text-red-500 mt-0.5">+3.28%</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">换手率 / 成交额</div>
+                        <div class="text-base font-bold font-mono text-slate-200 mt-1">4.74% <span class="text-xs text-slate-400">(4.64亿)</span></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">量比(主力放量)</div>
+                        <div class="text-base font-bold font-mono text-amber-300 mt-1">0.8 倍</div>
+                    </div>
+                </div>
+
+                <!-- 近期15日收盘走势图 -->
+                <div class="flex items-center justify-between px-2 text-xs text-slate-400">
+                    <span>近15日价格走势图谱:</span>
+                    <div>
+        <svg width="160" height="42" class="overflow-visible inline-block">
+            <path d="M 0.0,28.6 L 11.4,27.3 L 22.9,22.9 L 34.3,27.6 L 45.7,28.9 L 57.1,8.9 L 68.6,4.0 L 80.0,23.5 L 91.4,28.2 L 102.9,37.5 L 114.3,15.0 L 125.7,30.6 L 137.1,25.7 L 148.6,24.6 L 160.0,38.0 L 160,42 L 0,42 Z" fill="rgba(16, 185, 129, 0.15)" />
+            <path d="M 0.0,28.6 L 11.4,27.3 L 22.9,22.9 L 34.3,27.6 L 45.7,28.9 L 57.1,8.9 L 68.6,4.0 L 80.0,23.5 L 91.4,28.2 L 102.9,37.5 L 114.3,15.0 L 125.7,30.6 L 137.1,25.7 L 148.6,24.6 L 160.0,38.0" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="160.0" cy="38.0" r="3" fill="#10b981" />
+        </svg>
+        </div>
+                </div>
+
+                <!-- 核心看多逻辑 -->
+                <div class="bg-slate-900/40 rounded-xl p-3 border border-slate-800">
+                    <div class="text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1">
+                        <span>💡</span><span>大白话选股逻辑（为什么选它）：</span>
+                    </div>
+                    <ul class="space-y-1">
+                        <li class="flex items-start text-xs text-slate-300 gap-1.5"><span class="text-red-400 mt-0.5">●</span><span>股价强势站稳5日与20日生命线之上（乖离率 +0.2%），底部右侧转势确立</span></li><li class="flex items-start text-xs text-slate-300 gap-1.5"><span class="text-red-400 mt-0.5">●</span><span>换手率 4.74% 处于短线黄金活跃区间，股性弹性充沛且筹码锁定良好</span></li>
+                    </ul>
+                </div>
+
+                <!-- 实战买卖时机与防守铁律表 (新手重点) -->
+                <div class="bg-gradient-to-br from-slate-900/90 to-slate-950/90 rounded-xl p-3.5 border border-slate-700/80 space-y-2.5">
+                    <div class="text-xs font-bold text-slate-200 flex items-center justify-between">
+                        <span class="flex items-center gap-1"><span>🎯</span>新手实战买卖操作执行单</span>
+                        <span class="text-xs text-slate-400 font-normal">盈亏比: <strong class="text-white font-mono">2.9:1</strong></span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <!-- 买入区间 -->
+                        <div class="bg-slate-800/80 rounded-lg p-2.5 border border-emerald-500/30">
+                            <div class="text-emerald-400 font-bold mb-1 flex items-center gap-1">
+                                <span>🟢</span><span>建议买入区间</span>
+                            </div>
+                            <div class="text-sm font-bold font-mono text-white">¥22.91 ~ 22.97</div>
+                            <div class="text-[11px] text-slate-400 mt-1">分批低吸回踩，切忌盘初急追高</div>
+                        </div>
+
+                        <!-- 目标止盈 -->
+                        <div class="bg-slate-800/80 rounded-lg p-2.5 border border-red-500/30">
+                            <div class="text-red-400 font-bold mb-1 flex items-center gap-1">
+                                <span>🎯</span><span>第一止盈目标</span>
+                            </div>
+                            <div class="text-sm font-bold font-mono text-red-400">¥26.18 <span class="text-xs">(+14.0%)</span></div>
+                            <div class="text-[11px] text-slate-400 mt-1">达标后先卖出一半利润落袋</div>
+                        </div>
+
+                        <!-- 止损底线 -->
+                        <div class="bg-slate-800/80 rounded-lg p-2.5 border border-amber-500/30">
+                            <div class="text-amber-400 font-bold mb-1 flex items-center gap-1">
+                                <span>🛑</span><span>严格止损红线</span>
+                            </div>
+                            <div class="text-sm font-bold font-mono text-amber-300">¥21.87 <span class="text-xs">(-4.8%)</span></div>
+                            <div class="text-[11px] text-slate-400 mt-1">有效跌破立刻坚决离场，绝不抗单</div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between text-xs px-1 pt-1.5 text-slate-300 border-t border-slate-700/80 gap-2">
+                        <span class="flex items-center gap-1.5">
+                            <span class="text-amber-400 font-bold">💰 21,000本金建仓指引：</span>
+                            <strong class="text-amber-300 font-mono font-bold">买 200股 (2手) · 约 ¥4,594 (占本金 21.9%) | 达标预计赚 +¥642 / 止损最多亏 -¥220</strong>
+                        </span>
+                        <span class="text-[11px] text-slate-400">最小单位: 1手(100股) · T+1交割</span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </section>
+
+    <!-- 新手交易军规与避坑秘籍 -->
+    <section class="bg-gradient-to-r from-red-950/30 via-slate-900/60 to-slate-900/80 rounded-3xl p-6 border border-red-900/30 shadow-2xl mb-8">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="text-2xl">🛡️</span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">炒股新手生存与防爆仓军规（务必牢记心头）</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+                <div class="font-bold text-red-400 text-sm mb-1">1. 绝不满仓单只股票</div>
+                <p class="text-slate-300 leading-relaxed">新手最忌一次性把所有本金梭哈单只股票。单只持仓建议控制在 <strong>15%~20%</strong> 以内，最多同时持仓 2~3 只，手里永远保留 3~5 成现金应急。</p>
+            </div>
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+                <div class="font-bold text-amber-400 text-sm mb-1">2. 破止损线如机器人般执行</div>
+                <p class="text-slate-300 leading-relaxed">股票跌破给定的【严格止损红线】时，坚决无脑止损出局！不要心存“等反弹回本”的幻想，小亏割肉保本金，大亏深套悔断肠。</p>
+            </div>
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+                <div class="font-bold text-emerald-400 text-sm mb-1">3. 宁可踏空，绝不追高</div>
+                <p class="text-slate-300 leading-relaxed">早盘急拉狂冲的股票往往是诱多出货陷阱。买入必须在【建议买入区间】内等它回踩 5 日均线分批低吸，买不到就放弃，机会天天有。</p>
+            </div>
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+                <div class="font-bold text-blue-400 text-sm mb-1">4. 达目标分批止盈</div>
+                <p class="text-slate-300 leading-relaxed">达到【第一止盈目标】时，果断先卖出一半锁定真金白银利润！剩下的另一半把止损线抬高到买入成本价，让利润去无风险奔跑。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 底部免责声明 -->
+    <footer class="text-center text-xs text-slate-500 py-6 border-t border-slate-800/80 space-y-1">
+        <p>风险提示：本报告由量化算法模型自动生成，所有数据与测算结果仅供学习研究与交易策略辅助参考，不构成任何实质性投资建议与买卖依据。</p>
+        <p>股市有风险，入市需谨慎。A股实行 T+1 交易与涨跌幅限制，请务必根据自身风险承受能力独立决策。</p>
+    </footer>
+
+    <!-- Token 设置弹窗 -->
+    <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-left">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-base font-bold text-white flex items-center gap-2"><span>🔑</span> GitHub Token 配置</h3>
+                <button onclick="closeTokenModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                用于在网页端一键调用云端 GitHub Actions 重新运行量化选股模型。Token 仅保存在当前浏览器的 localStorage 中，绝不泄露。
+            </p>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1.5 font-medium">Personal Access Token (需勾选 workflow 权限):</label>
+                <input id="input-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-amber-400" />
+            </div>
+            <div class="flex items-center justify-between pt-2">
+                <button onclick="clearToken()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-slate-200 transition">清空已存密钥</button>
+                <div class="flex gap-2">
+                    <button onclick="closeTokenModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">取消</button>
+                    <button onclick="saveToken()" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-xs font-bold text-white shadow-lg shadow-amber-500/20">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 云端重算进度弹窗 -->
+    <div id="countdown-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+        <div class="bg-slate-900 border border-amber-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl text-center space-y-5">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl animate-pulse">
+                ⚡
+            </div>
+            <div>
+                <h3 id="modal-title" class="text-xl font-black text-white tracking-wide">云端量化引擎运算中...</h3>
+                <p id="modal-desc" class="text-xs text-slate-300 mt-2 leading-relaxed">
+                    已向 GitHub Actions 云端服务器下发即时扫描指令。<br/>
+                    正在拉取两市 400 只主板高流动性个股、执行五重防诱多排雷与 ATR(14) 动态风控测算。
+                </p>
+            </div>
+            
+            <!-- 进度条 -->
+            <div class="w-full bg-slate-800 rounded-full h-3.5 overflow-hidden border border-slate-700 p-0.5">
+                <div id="progress-bar" class="bg-gradient-to-r from-amber-500 via-red-500 to-emerald-500 h-full rounded-full transition-all duration-1000 ease-linear" style="width: 5%"></div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
+                <span id="modal-status">状态: <strong class="text-amber-400">正在计算...</strong></span>
+                <span>预计剩余: <strong id="cd-seconds" class="text-amber-300 text-base font-bold">35</strong> 秒</span>
+            </div>
+
+            <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
+                <a href="https://github.com/Roc0470/stock-analysis/actions" target="_blank" class="text-slate-400 hover:text-slate-200 underline">查看 GitHub Actions 运行日志</a>
+                <button onclick="forceRefresh()" class="text-amber-400 hover:underline font-medium">跳过等待 · 立即刷新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作提示 Toast -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 transition-all">
+        <span id="toast-icon"></span>
+        <span id="toast-msg"></span>
+    </div>
+
+    <script>
+        const REPO_OWNER = "Roc0470";
+        const REPO_NAME = "stock-analysis";
+        const WORKFLOW_ID = "daily_radar.yml";
+
+        function getSavedToken() {
+            return localStorage.getItem('gh_stock_token') || "";
+        }
+
+        function showToast(msg, type = "info") {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const text = document.getElementById('toast-msg');
+            
+            if (type === "success") {
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-emerald-950/90 border-emerald-500 text-emerald-200";
+                icon.textContent = "✅";
+            } else if (type === "error") {
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-red-950/90 border-red-500 text-red-200";
+                icon.textContent = "❌";
+            } else {
+                toast.className = "fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-2xl border text-xs font-semibold flex items-center gap-2 bg-slate-800 border-slate-700 text-slate-200";
+                icon.textContent = "ℹ️";
+            }
+
+            text.textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4000);
+        }
+
+        function forceRefresh() {
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.location.href = cleanUrl + '?v=' + Date.now();
+        }
+
+        function openTokenModal() {
+            const current = localStorage.getItem('gh_stock_token') || "";
+            document.getElementById('input-token').value = current;
+            document.getElementById('token-modal').classList.remove('hidden');
+        }
+
+        function closeTokenModal() {
+            document.getElementById('token-modal').classList.add('hidden');
+        }
+
+        function saveToken() {
+            const val = document.getElementById('input-token').value.trim();
+            if (val) {
+                localStorage.setItem('gh_stock_token', val);
+                showToast("Token 已成功保存至本地！", "success");
+            } else {
+                localStorage.removeItem('gh_stock_token');
+                showToast("已恢复默认内置 Token", "info");
+            }
+            closeTokenModal();
+        }
+
+        function clearToken() {
+            localStorage.removeItem('gh_stock_token');
+            document.getElementById('input-token').value = "";
+            showToast("已清空保存的 Token", "info");
+            closeTokenModal();
+        }
+
+        let countdownInterval = null;
+        let pollInterval = null;
+
+        async function triggerCloudScan() {
+            const btn = document.getElementById('btn-cloud-run');
+            const icon = document.getElementById('run-icon');
+            const text = document.getElementById('run-text');
+            const token = getSavedToken();
+
+            if (!token) {
+                openTokenModal();
+                return;
+            }
+
+            // 禁用按钮并展示加载动画
+            btn.disabled = true;
+            btn.classList.add('opacity-75');
+            icon.textContent = "⏳";
+            text.textContent = "正在下发指令...";
+
+            const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/dispatches`;
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github+json',
+                        'Authorization': 'token ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ref: 'main' })
+                });
+
+                if (res.status === 204) {
+                    // 触发成功，弹出倒计时与进度监听弹窗
+                    startCountdownAndWatch(token);
+                } else if (res.status === 401 || res.status === 403) {
+                    showToast("Token 权限不足或已失效，请重新设置！", "error");
+                    openTokenModal();
+                    resetButton();
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    showToast("触发失败: " + (err.message || res.statusText), "error");
+                    resetButton();
+                }
+            } catch (e) {
+                showToast("网络请求异常: " + e.message, "error");
+                resetButton();
+            }
+        }
+
+        function resetButton() {
+            const btn = document.getElementById('btn-cloud-run');
+            const icon = document.getElementById('run-icon');
+            const text = document.getElementById('run-text');
+            btn.disabled = false;
+            btn.classList.remove('opacity-75');
+            icon.textContent = "⚡";
+            text.textContent = "云端一键重算 (Run)";
+        }
+
+        function startCountdownAndWatch(token) {
+            const modal = document.getElementById('countdown-modal');
+            const bar = document.getElementById('progress-bar');
+            const cdNum = document.getElementById('cd-seconds');
+            const statusEl = document.getElementById('modal-status');
+            const descEl = document.getElementById('modal-desc');
+
+            modal.classList.remove('hidden');
+
+            const totalSeconds = 36;
+            let remaining = totalSeconds;
+            const startTime = Date.now();
+
+            if (countdownInterval) clearInterval(countdownInterval);
+            if (pollInterval) clearInterval(pollInterval);
+
+            countdownInterval = setInterval(() => {
+                remaining--;
+                if (remaining < 0) remaining = 0;
+                cdNum.textContent = remaining;
+
+                const pct = Math.min(95, Math.round(((totalSeconds - remaining) / totalSeconds) * 95));
+                bar.style.width = pct + "%";
+
+                if (remaining <= 0) {
+                    clearInterval(countdownInterval);
+                    statusEl.innerHTML = '<strong class="text-emerald-400">完成！正在载入...</strong>';
+                    bar.style.width = "100%";
+                    setTimeout(forceRefresh, 1500);
+                }
+            }, 1000);
+
+            // 在第 18 秒后开始向 GitHub API 轮询最新运行状态
+            setTimeout(() => {
+                pollInterval = setInterval(async () => {
+                    try {
+                        const runRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runs?per_page=1`, {
+                            headers: {
+                                'Accept': 'application/vnd.github+json',
+                                'Authorization': 'token ' + token
+                            }
+                        });
+                        if (runRes.ok) {
+                            const data = await runRes.json();
+                            const latest = data.workflow_runs && data.workflow_runs[0];
+                            if (latest) {
+                                const runTime = new Date(latest.created_at).getTime();
+                                if (runTime >= startTime - 15000 && latest.status === 'completed') {
+                                    clearInterval(countdownInterval);
+                                    clearInterval(pollInterval);
+                                    statusEl.innerHTML = '<strong class="text-emerald-400">运算成功！</strong>';
+                                    descEl.textContent = '🎉 GitHub 云端计算已顺利完成，最新报告部署就绪！';
+                                    bar.style.width = "100%";
+                                    cdNum.textContent = "0";
+                                    setTimeout(forceRefresh, 1200);
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        // 静默失败，继续依靠本地倒计时
+                    }
+                }, 4000);
+            }, 18000);
+        }
+    </script>
+</body>
+</html>

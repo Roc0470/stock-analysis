@@ -52,6 +52,10 @@ def parse_ths_table(text):
         if code_idx is not None and len(parts) > code_idx + 6:
             code = parts[code_idx]
             name = parts[code_idx + 1]
+            # 仅监控 A股 股票 (60/68/00/30开头)，自动过滤国债逆回购、标准券、基金质押等
+            if not re.match(r'^(60|68|00|30)\d{4}$', code) or any(k in name for k in ['标准券', '回购', '质押', '国债']):
+                continue
+
             try:
                 shares = int(float(parts[code_idx + 2]))
                 # 只有未清仓（股数 > 0）的才是有效持仓

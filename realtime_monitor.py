@@ -35,7 +35,7 @@ DEFAULT_HOLDINGS = [
         'code': '600741',
         'name': '华域汽车',
         'cost': 14.162,          # 摊薄后底仓成本
-        'stop_loss': 15.60,      # 底线保本止损
+        'stop_loss': 15.90,      # 抬高后的移动锁利止损线
         'take_profit': 16.50,    # 清仓止盈目标
         'warn_pullback': 2.0,
         'shares': 100

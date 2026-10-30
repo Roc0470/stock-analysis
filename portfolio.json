@@ -4,10 +4,11 @@
     "code": "600741",
     "name": "华域汽车",
     "shares": 100,
-    "cost": 14.162,
-    "market_price": 16.14,
+    "cost": 14.157,
+    "market_price": 16.19,
     "stop_loss": 15.90,
     "take_profit": 16.50,
-    "updated_at": "2026-10-30 11:50:00"
+    "warn_pullback": 2.5,
+    "updated_at": "2026-10-30 13:24:20"
   }
 ]

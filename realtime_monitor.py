@@ -68,6 +68,16 @@ def get_active_holdings():
             pass
     return DEFAULT_HOLDINGS
 
+def save_active_holdings(holdings):
+    """持久化更新活跃持仓到 portfolio.json"""
+    p_file = os.path.join(os.path.dirname(__file__), "portfolio.json")
+    try:
+        import json
+        with open(p_file, "w", encoding="utf-8") as f:
+            json.dump(holdings, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[提示] 持久化 portfolio.json 失败: {e}")
+
 class RealTimeMonitor:
     def __init__(self, check_interval=20):
         self.interval = check_interval
@@ -207,41 +217,119 @@ class RealTimeMonitor:
 
             print(f"  • {name:<5} 现价: ¥{cur:>6.2f} ({pct:+5.2f}%) | 成本: ¥{cfg['cost']:.3f} | 浮盈: {profit_rmb:+6.1f}元 | 今低: ¥{low:.2f}")
 
-            # 1. 触发保本 / 止损红线 (最紧急)
+            # 0. 智能移动止损自动抬高研判 (Trailing Stop Ratchet - 只升不降保护利润)
+            cost = cfg['cost']
+            old_stop = cfg['stop_loss']
+            gain_pct = (cur - cost) / cost * 100 if cost > 0 else 0
+            
+            # 计算建议防守线：
+            # (1) 浮盈阶梯：>=3% 保本(cost)；>=5% 锁利(cost*1.025)；>=8% 锁利(cost*1.05)
+            # (2) 冲高回撤保护：若冲高幅度较大，回撤保护线设在 high * 0.97 (最高点下浮 3%)
+            calc_stops = [old_stop]
+            if cfg['code'] == '600741':
+                calc_stops.append(15.90) # 保持用户确认的最低防守线
+            if gain_pct >= 8.0:
+                calc_stops.append(round(cost * 1.05, 2))
+            elif gain_pct >= 5.0:
+                calc_stops.append(round(cost * 1.025, 2))
+            elif gain_pct >= 3.0:
+                calc_stops.append(round(cost, 2))
+            
+            if high >= cost * 1.05:
+                calc_stops.append(round(high * 0.97, 2))
+
+            new_stop = max(calc_stops)
+            # 新止损必须低于现价至少 0.05 元，且较原止损抬高 0.05 元以上才触发更新
+            if new_stop > old_stop + 0.05 and new_stop < cur:
+                cfg['stop_loss'] = new_stop
+                # 同步持久化到 portfolio.json
+                all_holdings = get_active_holdings()
+                for item in all_holdings:
+                    if item['symbol'] == sym:
+                        item['stop_loss'] = new_stop
+                        item['updated_at'] = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                save_active_holdings(all_holdings)
+
+                title = f"🛡️【自动抬高止损】{name} 保护线已上调至 ¥{new_stop}！"
+                msg = (
+                    f"### 🛡️ 智能移动锁利：止损防守线已自动上调\n\n"
+                    f"- **标的**：{name} ({cfg['code']})\n"
+                    f"- **现价**：¥{cur:.2f} (当前浮盈 {gain_pct:+.2f}%)\n"
+                    f"- **日内最高**：¥{high:.2f}\n"
+                    f"- **止损保护线**：原 ¥{old_stop:.2f} ➔ **已自动上调至 ¥{new_stop:.2f}**\n\n"
+                    f"💡 **锁利效果**：系统已全自动更新后台风控参数。后续若跌破 ¥{new_stop:.2f}，将立即触发微信卖出警报，确保稳稳落袋大部分利润！"
+                )
+                print(f"\n>>> {title}\n{msg}\n")
+                self.send_windows_notification(title, f"{name} 保护线已自动抬高至 ¥{new_stop} (现价 ¥{cur:.2f})")
+                self.send_wechat_alert(title, msg)
+
+            # 1. 触发保本 / 止损红线 (最紧急：执行卖出)
             if cur <= cfg['stop_loss']:
                 alert_key = f"{sym}_stop"
                 if time.time() - self.alert_history.get(alert_key, 0) > 300: # 5分钟防重复
                     self.alert_history[alert_key] = time.time()
-                    title = f"🚨【紧急平仓】{name} 已触碰保本线 ¥{cfg['stop_loss']}！"
-                    msg = f"{name}({cfg['code']}) 现价已跌至 ¥{cur:.2f} (今低 ¥{low:.2f})，已触碰严格保本止损红线 ¥{cfg['stop_loss']}！请立即在同花顺市价清仓，保住本金！"
+                    title = f"🚨【建议立即卖出】{name} 触碰止损防守线 ¥{cfg['stop_loss']}！"
+                    sell_shares = cfg['shares']
+                    msg = (
+                        f"### 🚨 操作建议：立即执行卖出平仓\n\n"
+                        f"- **标的**：{name} ({cfg['code']})\n"
+                        f"- **现价**：¥{cur:.2f} (今低 ¥{low:.2f})\n"
+                        f"- **触发原因**：跌破移动止损防守线 ¥{cfg['stop_loss']:.2f}\n\n"
+                        f"📱 **同花顺具体委托操作指引**：\n"
+                        f"1. 打开同花顺 App 或电脑端；\n"
+                        f"2. 进入【交易】➔【持仓】找到【{name}】点【卖出】；\n"
+                        f"3. 委托类型选择【市价委托】或现价卖出；\n"
+                        f"4. 委托数量选择：**全部 {sell_shares} 股**；\n"
+                        f"5. 点击确认卖出，锁定利润/防守本金！"
+                    )
                     print(f"\n>>> {title}\n{msg}\n")
-                    self.send_windows_notification(title, msg)
+                    self.send_windows_notification(title, f"{name} 触碰防守线 ¥{cfg['stop_loss']}，建议在同花顺市价清仓！")
                     self.send_wechat_alert(title, msg)
 
-            # 2. 触发止盈目标价 (达标落袋)
+            # 2. 触发止盈目标价 (达标落袋：建议卖出)
             elif cur >= cfg['take_profit']:
                 alert_key = f"{sym}_target"
                 if time.time() - self.alert_history.get(alert_key, 0) > 300:
                     self.alert_history[alert_key] = time.time()
-                    title = f"🎯【止盈达标】{name} 已达到目标价 ¥{cfg['take_profit']}！"
+                    title = f"🎯【止盈达标·建议卖出】{name} 已达到目标价 ¥{cfg['take_profit']}！"
                     if cfg['shares'] <= 100:
-                        action_desc = "达到目标价，持仓仅剩 100 股底仓，建议在同花顺【全部清仓落袋】锁定全部利润！"
+                        sell_desc = f"持仓仅剩 100 股底仓，建议**全部卖出清仓**锁定全部战果"
+                        sell_shares = cfg['shares']
                     else:
-                        action_desc = f"达到第一止盈目标 ¥{cfg['take_profit']}，请在同花顺【卖出一半锁定利润】！"
-                    msg = f"{name}({cfg['code']}) 现价已大涨至 ¥{cur:.2f}！{action_desc}"
+                        sell_desc = f"建议**卖出一半 ({cfg['shares'] // 100 * 50} 股)**锁定利润，剩余底仓继续博更高"
+                        sell_shares = (cfg['shares'] // 200) * 100
+
+                    msg = (
+                        f"### 🎯 操作建议：达到止盈目标，落袋为安\n\n"
+                        f"- **标的**：{name} ({cfg['code']})\n"
+                        f"- **现价**：¥{cur:.2f} (已达目标价 ¥{cfg['take_profit']:.2f})\n"
+                        f"- **策略指引**：{sell_desc}\n\n"
+                        f"📱 **同花顺具体委托操作指引**：\n"
+                        f"1. 打开同花顺【交易】➔【持仓】；\n"
+                        f"2. 选择【{name}】点击【卖出】；\n"
+                        f"3. 建议委托数量：**{sell_shares} 股**；\n"
+                        f"4. 提交委托，大获全胜！"
+                    )
                     print(f"\n>>> {title}\n{msg}\n")
-                    self.send_windows_notification(title, msg)
+                    self.send_windows_notification(title, f"{name} 已达目标价 ¥{cfg['take_profit']}，建议在同花顺卖出锁定利润！")
                     self.send_wechat_alert(title, msg)
 
-            # 3. 盘中冲高大幅回撤预警
+            # 3. 盘中冲高大幅回撤预警 (走弱提醒)
             elif high > cfg['cost'] * 1.02 and (high - cur) / high * 100 >= cfg['warn_pullback']:
                 alert_key = f"{sym}_pullback"
                 if time.time() - self.alert_history.get(alert_key, 0) > 600:
                     self.alert_history[alert_key] = time.time()
-                    title = f"⚠️【高位回撤预警】{name} 冲高回落超 {cfg['warn_pullback']}%"
-                    msg = f"{name}({cfg['code']}) 早盘最高探至 ¥{high:.2f}，现已回落至 ¥{cur:.2f}。分时出现滞涨走弱，建议注意防守！"
+                    pull_pct = round((high - cur) / high * 100, 1)
+                    title = f"⚠️【冲高回落预警】{name} 距高点回撤达 {pull_pct}%"
+                    msg = (
+                        f"### ⚠️ 技术面走弱预警：冲高回落\n\n"
+                        f"- **标的**：{name} ({cfg['code']})\n"
+                        f"- **早盘最高**：¥{high:.2f} ➔ **现价**：¥{cur:.2f} (回撤 {pull_pct}%)\n"
+                        f"- **研判分析**：分时出现冲高滞涨，买盘动能减弱。\n"
+                        f"- **应对策略**：密切注意分时均线得失，若无力反包，建议提前在同花顺减仓或择机卖出。"
+                    )
                     print(f"\n>>> {title}\n{msg}\n")
-                    self.send_windows_notification(title, msg)
+                    self.send_windows_notification(title, f"{name} 早盘冲高 ¥{high} 后回撤 {pull_pct}%，注意防守！")
                     self.send_wechat_alert(title, msg)
 
     def run_forever(self, auto_exit_at_close=True):

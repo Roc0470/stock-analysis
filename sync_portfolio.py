@@ -80,7 +80,7 @@ def parse_ths_table(text):
                     # 如果原持仓已有更高的目标设定，尽量保留
                     if code == '600741': # 华域汽车底仓
                         take_profit = max(take_profit, 16.50)
-                        stop_loss = max(stop_loss, 15.60)
+                        stop_loss = max(stop_loss, 15.90)
 
                     holdings.append({
                         'symbol': f"{prefix}{code}",

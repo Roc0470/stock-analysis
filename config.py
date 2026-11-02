@@ -61,7 +61,12 @@ SCAN_POOL_COUNT = 400     # 扫描全市场成交额前 400 名活跃股
 TOP_RECOMMEND_COUNT = 5   # 每日严选 TOP 5 精品（宁缺毋滥）
 
 # 8. 微信主动推送配置 (从本地私有 .env 或环境变量读取，公开仓库零明文泄露)
-SERVERCHAN_KEY = os.environ.get("SERVERCHAN_KEY") or _LOCAL_ENV.get("SERVERCHAN_KEY", "")
+def get_serverchan_key():
+    """支持运行期热读取最新 .env 中的微信密钥，修改 .env 无需重启进程"""
+    latest_env = _load_local_env()
+    return os.environ.get("SERVERCHAN_KEY") or latest_env.get("SERVERCHAN_KEY", "")
+
+SERVERCHAN_KEY = get_serverchan_key()
 PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN") or _LOCAL_ENV.get("PUSHPLUS_TOKEN", "")
 
 # 9. 电脑端报警提示音模式 ('silent' 纯静音气泡 | 'soft' 柔和轻声 | 'loud' 蜂鸣重音)

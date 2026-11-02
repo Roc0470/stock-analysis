@@ -9,7 +9,8 @@ import config
 
 class WeChatNotifier:
     def __init__(self, sct_key=None, pushplus_token=None):
-        self.sct_key = sct_key if sct_key is not None else getattr(config, 'SERVERCHAN_KEY', '')
+        default_sct = config.get_serverchan_key() if hasattr(config, 'get_serverchan_key') else getattr(config, 'SERVERCHAN_KEY', '')
+        self.sct_key = sct_key if sct_key is not None else default_sct
         self.pushplus_token = pushplus_token if pushplus_token is not None else getattr(config, 'PUSHPLUS_TOKEN', '')
         self.session = requests.Session()
         self.session.trust_env = False

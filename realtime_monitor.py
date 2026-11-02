@@ -186,9 +186,9 @@ class RealTimeMonitor:
             log_msg(f"[提示] Windows 气泡通知发送失败: {e}")
 
     def send_wechat_alert(self, title, content):
-        """通过本地 .env 中的 Server酱密钥推送微信紧急通知"""
+        """通过本地 .env 中的 Server酱密钥热读取推送微信紧急通知"""
         import config
-        sct_key = getattr(config, 'SERVERCHAN_KEY', '')
+        sct_key = config.get_serverchan_key() if hasattr(config, 'get_serverchan_key') else getattr(config, 'SERVERCHAN_KEY', '')
         if sct_key:
             try:
                 self.session.post(

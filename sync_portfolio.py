@@ -164,7 +164,7 @@ def sync_now(custom_text=None):
     # 发送微信同步确认
     try:
         import config
-        sct_key = getattr(config, 'SERVERCHAN_KEY', '')
+        sct_key = config.get_serverchan_key() if hasattr(config, 'get_serverchan_key') else getattr(config, 'SERVERCHAN_KEY', '')
         if sct_key:
             if holdings:
                 msg_lines = [

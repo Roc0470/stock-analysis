@@ -12,6 +12,8 @@ import os
 import sys
 import json
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timezone, timedelta
 import requests
 
@@ -20,8 +22,91 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PORTFOLIO_FILE = os.path.join(BASE_DIR, "portfolio.json")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 PID_FILE = os.path.join(LOG_DIR, "monitor.pid")
+LOCAL_API_PORT = 18899
 
 os.makedirs(LOG_DIR, exist_ok=True)
+
+
+class LocalRadarBridgeHandler(BaseHTTPRequestHandler):
+    """本地极速重算 HTTP 桥接服务 (127.0.0.1:18899)，供桌面 HTML 报告点击【一键重算】时毫秒级响应"""
+
+    def log_message(self, format, *args):
+        """静默 HTTP 访问日志，避免污染盯盘日志"""
+        pass
+
+    def _send_cors_json(self, status_code, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self._send_cors_json(200, {"ok": True})
+
+    def do_GET(self):
+        if self.path.startswith("/ping"):
+            self._send_cors_json(200, {
+                "ok": True,
+                "service": "AShare_Local_Radar_Bridge",
+                "time": datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            })
+        else:
+            self._send_cors_json(404, {"ok": False, "error": "Not found"})
+
+    def do_POST(self):
+        if self.path.startswith("/run-radar"):
+            log_msg(f"[{datetime.now(BEIJING_TZ).strftime('%H:%M:%S')}] ⚡ 收到桌面网页【一键重算】指令，正在本地极速重算并刷新桌面报告...")
+            py_exe = os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe")
+            if not os.path.exists(py_exe):
+                py_exe = sys.executable
+            main_script = os.path.join(BASE_DIR, "main.py")
+            try:
+                CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                proc = subprocess.run(
+                    [py_exe, "-u", main_script, "--no-open"],
+                    cwd=BASE_DIR,
+                    creationflags=CREATE_NO_WINDOW,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="ignore",
+                    timeout=90
+                )
+                if proc.returncode == 0:
+                    now_str = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日 %H:%M")
+                    log_msg(f"[{datetime.now(BEIJING_TZ).strftime('%H:%M:%S')}] ✅ 本地极速重算完成！桌面《今日A股短线雷达.html》已更新至 {now_str}。")
+                    self._send_cors_json(200, {
+                        "ok": True,
+                        "report_time": now_str,
+                        "message": "本地极速重算完成，桌面报告已更新"
+                    })
+                else:
+                    err_tail = (proc.stderr or proc.stdout or "Unknown error")[-300:]
+                    log_msg(f"[错误] 本地重算返回非零状态: {err_tail}")
+                    self._send_cors_json(500, {"ok": False, "error": err_tail})
+            except Exception as e:
+                log_msg(f"[错误] 本地重算执行异常: {e}")
+                self._send_cors_json(500, {"ok": False, "error": str(e)})
+        else:
+            self._send_cors_json(404, {"ok": False, "error": "Not found"})
+
+
+def start_local_bridge_server():
+    """在后台守护线程中启动 127.0.0.1:18899 本地一键重算桥接服务"""
+    try:
+        server = HTTPServer(("127.0.0.1", LOCAL_API_PORT), LocalRadarBridgeHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        log_msg(f"   🌐 本地网页一键重算桥接服务已就绪: http://127.0.0.1:{LOCAL_API_PORT}/run-radar")
+        return server
+    except Exception as e:
+        log_msg(f"   [提示] 本地桥接端口 {LOCAL_API_PORT} 已被占用或启动跳过: {e}")
+        return None
 
 
 def log_msg(text):
@@ -393,6 +478,7 @@ class RealTimeMonitor:
             log_msg("=" * 68)
             log_msg(f"   🤖 A股持仓实盘毫秒级盯盘机器人 V3.0 启动 (PID={os.getpid()})")
             log_msg(f"   监控标的: {names} | 轮询间隔: {self.interval}s")
+            start_local_bridge_server()
             log_msg("=" * 68)
 
             while True:

@@ -394,10 +394,10 @@ class ReportGenerator:
                 <div class="text-xs text-slate-400">报告生成时间 (北京时间)</div>
                 <div class="text-sm font-bold text-amber-300 font-mono">{report_date}</div>
             </div>
-            <!-- 云端即时重算按钮 -->
+            <!-- 本地/云端智能一键重算按钮 -->
             <button id="btn-cloud-run" onclick="triggerCloudScan()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-red-500/25 active:scale-95 transition cursor-pointer">
                 <span id="run-icon">⚡</span>
-                <span id="run-text">云端一键重算 (Run)</span>
+                <span id="run-text">一键实时重算 (Run)</span>
             </button>
             <!-- 强制刷新 -->
             <button onclick="forceRefresh()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition cursor-pointer">
@@ -585,6 +585,10 @@ class ReportGenerator:
         }}
 
         function forceRefresh() {{
+            if (window.location.protocol === 'file:') {{
+                window.location.reload();
+                return;
+            }}
             const cleanUrl = window.location.origin + window.location.pathname;
             window.location.href = cleanUrl + '?v=' + Date.now();
         }}
@@ -621,22 +625,95 @@ class ReportGenerator:
         let countdownInterval = null;
         let pollInterval = null;
 
+        async function tryLocalDirectScan() {{
+            try {{
+                const pingCtrl = new AbortController();
+                const pingTimer = setTimeout(() => pingCtrl.abort(), 1200);
+                const pingRes = await fetch("http://127.0.0.1:18899/ping", {{ signal: pingCtrl.signal }});
+                clearTimeout(pingTimer);
+                if (!pingRes.ok) return false;
+            }} catch (e) {{
+                return false;
+            }}
+
+            // 检测到本机后台守护服务在线，直接启动本机 8 秒极速重算
+            const modal = document.getElementById('countdown-modal');
+            const bar = document.getElementById('progress-bar');
+            const cdNum = document.getElementById('cd-seconds');
+            const statusEl = document.getElementById('modal-status');
+            const descEl = document.getElementById('modal-desc');
+            const titleEl = document.getElementById('modal-title');
+
+            titleEl.textContent = "本机极速引擎运算中...";
+            descEl.innerHTML = "已连接您电脑后台的 <b>本机实盘守护引擎 (127.0.0.1)</b>！<br/>正在直接拉取最新盘口、更新【实盘持仓去留体检】与桌面报告...";
+            modal.classList.remove('hidden');
+
+            let remaining = 12;
+            cdNum.textContent = remaining;
+            bar.style.width = "10%";
+            if (countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {{
+                remaining--;
+                if (remaining < 1) remaining = 1;
+                cdNum.textContent = remaining;
+                const pct = Math.min(92, Math.round(((12 - remaining) / 12) * 92));
+                bar.style.width = pct + "%";
+            }}, 1000);
+
+            try {{
+                const runRes = await fetch("http://127.0.0.1:18899/run-radar", {{ method: "POST" }});
+                const data = await runRes.json();
+                clearInterval(countdownInterval);
+                if (runRes.ok && data.ok) {{
+                    bar.style.width = "100%";
+                    cdNum.textContent = "0";
+                    statusEl.innerHTML = '<strong class="text-emerald-400">本机重算完成！正在刷新...</strong>';
+                    descEl.textContent = "🎉 桌面报告已更新至最新时刻 (" + (data.report_time || "") + ")，即将自动刷新页面！";
+                    setTimeout(() => {{ window.location.reload(); }}, 800);
+                    return true;
+                }} else {{
+                    modal.classList.add('hidden');
+                    showToast("本机重算异常: " + (data.error || "未知错误"), "error");
+                    resetButton();
+                    return true;
+                }}
+            }} catch (err) {{
+                clearInterval(countdownInterval);
+                modal.classList.add('hidden');
+                return false;
+            }}
+        }}
+
         async function triggerCloudScan() {{
             const btn = document.getElementById('btn-cloud-run');
             const icon = document.getElementById('run-icon');
             const text = document.getElementById('run-text');
-            const token = getSavedToken();
-
-            if (!token) {{
-                openTokenModal();
-                return;
-            }}
 
             // 禁用按钮并展示加载动画
             btn.disabled = true;
             btn.classList.add('opacity-75');
             icon.textContent = "⏳";
             text.textContent = "正在下发指令...";
+
+            // 1. 优先尝试连接本机后台极速重算服务 (127.0.0.1:18899)，无需 Token 且直接更新本地桌面文件
+            const handledLocally = await tryLocalDirectScan();
+            if (handledLocally) {{
+                return;
+            }}
+
+            // 2. 若在手机端或本机守护未开启，回退至 GitHub Actions 云端重算
+            if (window.location.protocol === 'file:') {{
+                showToast("未检测到本机后台服务，请先运行桌面【启动实盘盯盘与卖出报警.bat】或直接双击【启动A股短线量化雷达.bat】刷新本地报告！", "error");
+                resetButton();
+                return;
+            }}
+
+            const token = getSavedToken();
+            if (!token) {{
+                resetButton();
+                openTokenModal();
+                return;
+            }}
 
             const url = `https://api.github.com/repos/${{REPO_OWNER}}/${{REPO_NAME}}/actions/workflows/${{WORKFLOW_ID}}/dispatches`;
 
@@ -676,7 +753,7 @@ class ReportGenerator:
             btn.disabled = false;
             btn.classList.remove('opacity-75');
             icon.textContent = "⚡";
-            text.textContent = "云端一键重算 (Run)";
+            text.textContent = "一键实时重算 (Run)";
         }}
 
         function startCountdownAndWatch(token) {{

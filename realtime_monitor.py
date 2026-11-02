@@ -28,7 +28,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 class LocalRadarBridgeHandler(BaseHTTPRequestHandler):
-    """本地极速重算 HTTP 桥接服务 (127.0.0.1:18899)，供桌面 HTML 报告点击【一键重算】时毫秒级响应"""
+    """本地极速重算 HTTP 桥接服务 (127.0.0.1:18899)，供桌面或在线 HTML 报告点击【一键重算】时毫秒级响应（兼容 Chrome Private Network Access）"""
 
     def log_message(self, format, *args):
         """静默 HTTP 访问日志，避免污染盯盘日志"""
@@ -40,7 +40,8 @@ class LocalRadarBridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Access-Control-Request-Private-Network")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

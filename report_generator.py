@@ -392,7 +392,7 @@ class ReportGenerator:
         <div class="flex flex-wrap items-center gap-2.5">
             <div class="text-right mr-1">
                 <div class="text-xs text-slate-400">报告生成时间 (北京时间)</div>
-                <div class="text-sm font-bold text-amber-300 font-mono">{report_date}</div>
+                <div id="report-time-label" class="text-sm font-bold text-amber-300 font-mono">{report_date}</div>
             </div>
             <!-- 本地/云端智能一键重算按钮 -->
             <button id="btn-cloud-run" onclick="triggerCloudScan()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-red-500/25 active:scale-95 transition cursor-pointer">
@@ -584,12 +584,28 @@ class ReportGenerator:
             }}, 4000);
         }}
 
-        function forceRefresh() {{
+        async function forceRefresh() {{
             if (window.location.protocol === 'file:') {{
                 window.location.reload();
                 return;
             }}
             const cleanUrl = window.location.origin + window.location.pathname;
+            try {{
+                const res = await fetch(cleanUrl + '?_nocache=' + Date.now(), {{
+                    cache: 'reload',
+                    headers: {{ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }}
+                }});
+                if (res.ok) {{
+                    const newHtml = await res.text();
+                    if (newHtml && newHtml.includes('<!DOCTYPE html>')) {{
+                        document.open();
+                        document.write(newHtml);
+                        document.close();
+                        window.history.replaceState(null, '', cleanUrl + '?v=' + Date.now());
+                        return;
+                    }}
+                }}
+            }} catch (e) {{}}
             window.location.href = cleanUrl + '?v=' + Date.now();
         }}
 
@@ -668,8 +684,15 @@ class ReportGenerator:
                     bar.style.width = "100%";
                     cdNum.textContent = "0";
                     statusEl.innerHTML = '<strong class="text-emerald-400">本机重算完成！正在刷新...</strong>';
-                    descEl.textContent = "🎉 桌面报告已更新至最新时刻 (" + (data.report_time || "") + ")，即将自动刷新页面！";
-                    setTimeout(() => {{ window.location.reload(); }}, 800);
+                    descEl.textContent = "🎉 本机实盘报告已更新至最新时刻 (" + (data.report_time || "") + ")，即将自动刷新！";
+                    setTimeout(() => {{
+                        if (window.location.protocol === 'file:') {{
+                            window.location.reload();
+                        }} else {{
+                            // 如果用户在电脑上打开的是 github.io 在线链接，提示或同步刷新
+                            forceRefresh();
+                        }}
+                    }}, 800);
                     return true;
                 }} else {{
                     modal.classList.add('hidden');
@@ -695,18 +718,18 @@ class ReportGenerator:
             icon.textContent = "⏳";
             text.textContent = "正在下发指令...";
 
-            // 1. 优先尝试连接本机后台极速重算服务 (127.0.0.1:18899)，无需 Token 且直接更新本地桌面文件
-            const handledLocally = await tryLocalDirectScan();
-            if (handledLocally) {{
-                return;
-            }}
-
-            // 2. 若在手机端或本机守护未开启，回退至 GitHub Actions 云端重算
+            // 1. 仅当在本地桌面打开 (file://) 时，优先连接本机后台极速重算服务 (127.0.0.1:18899)，8秒更新本地桌面报告
             if (window.location.protocol === 'file:') {{
+                const handledLocally = await tryLocalDirectScan();
+                if (handledLocally) {{
+                    return;
+                }}
                 showToast("未检测到本机后台服务，请先运行桌面【启动实盘盯盘与卖出报警.bat】或直接双击【启动A股短线量化雷达.bat】刷新本地报告！", "error");
                 resetButton();
                 return;
             }}
+
+            // 2. 当打开的是 https://roc0470.github.io/stock-analysis 在线网页时，走 GitHub Actions 云端重算 + Pages CDN 穿透等待
 
             const token = getSavedToken();
             if (!token) {{
@@ -762,10 +785,11 @@ class ReportGenerator:
             const cdNum = document.getElementById('cd-seconds');
             const statusEl = document.getElementById('modal-status');
             const descEl = document.getElementById('modal-desc');
+            const oldTimeText = (document.getElementById('report-time-label') || {{}}).textContent || "";
 
             modal.classList.remove('hidden');
 
-            const totalSeconds = 36;
+            const totalSeconds = 68;
             let remaining = totalSeconds;
             const startTime = Date.now();
 
@@ -782,17 +806,18 @@ class ReportGenerator:
 
                 if (remaining <= 0) {{
                     clearInterval(countdownInterval);
+                    if (pollInterval) clearInterval(pollInterval);
                     statusEl.innerHTML = '<strong class="text-emerald-400">完成！正在载入...</strong>';
                     bar.style.width = "100%";
-                    setTimeout(forceRefresh, 1500);
+                    setTimeout(forceRefresh, 800);
                 }}
             }}, 1000);
 
-            // 在第 18 秒后开始向 GitHub API 轮询最新运行状态
+            // 在第 22 秒后开始向 GitHub API 轮询：不仅等待选股完成，还等待 Pages 部署彻底就绪且 CDN 页面时间戳真正更新
             setTimeout(() => {{
                 pollInterval = setInterval(async () => {{
                     try {{
-                        const runRes = await fetch(`https://api.github.com/repos/${{REPO_OWNER}}/${{REPO_NAME}}/actions/runs?per_page=1`, {{
+                        const runRes = await fetch(`https://api.github.com/repos/${{REPO_OWNER}}/${{REPO_NAME}}/actions/runs?per_page=3`, {{
                             headers: {{
                                 'Accept': 'application/vnd.github+json',
                                 'Authorization': 'token ' + token
@@ -800,25 +825,46 @@ class ReportGenerator:
                         }});
                         if (runRes.ok) {{
                             const data = await runRes.json();
-                            const latest = data.workflow_runs && data.workflow_runs[0];
-                            if (latest) {{
-                                const runTime = new Date(latest.created_at).getTime();
-                                if (runTime >= startTime - 15000 && latest.status === 'completed') {{
-                                    clearInterval(countdownInterval);
-                                    clearInterval(pollInterval);
-                                    statusEl.innerHTML = '<strong class="text-emerald-400">运算成功！</strong>';
-                                    descEl.textContent = '🎉 GitHub 云端计算已顺利完成，最新报告部署就绪！';
-                                    bar.style.width = "100%";
-                                    cdNum.textContent = "0";
-                                    setTimeout(forceRefresh, 1200);
+                            const runs = data.workflow_runs || [];
+                            const radarRun = runs.find(r => r.name === 'A-Share Daily Quant Radar' && new Date(r.created_at).getTime() >= startTime - 20000);
+                            const pagesRun = runs.find(r => r.name === 'pages build and deployment' && new Date(r.created_at).getTime() >= startTime - 10000);
+
+                            if (radarRun && radarRun.status === 'completed') {{
+                                statusEl.innerHTML = '<strong class="text-amber-300">选股已完成，正在同步 CDN 网页...</strong>';
+                                descEl.textContent = '⚡ 量化选股计算完毕！正在等待 GitHub Pages 全球 CDN 节点刷新最新报告 (约需 15~20 秒)...';
+                            }}
+
+                            // 当 Pages 部署也完成（或者选股完成后已超过 25 秒），探测在线 HTML 是否已包含新时间戳
+                            if ((pagesRun && pagesRun.status === 'completed') || (radarRun && radarRun.status === 'completed' && remaining < 25)) {{
+                                const cleanUrl = window.location.origin + window.location.pathname;
+                                const probeRes = await fetch(cleanUrl + '?_probe=' + Date.now(), {{
+                                    cache: 'reload',
+                                    headers: {{ 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }}
+                                }});
+                                if (probeRes.ok) {{
+                                    const htmlText = await probeRes.text();
+                                    if (htmlText && (!oldTimeText || !htmlText.includes(oldTimeText))) {{
+                                        clearInterval(countdownInterval);
+                                        clearInterval(pollInterval);
+                                        statusEl.innerHTML = '<strong class="text-emerald-400">CDN 同步成功！</strong>';
+                                        descEl.textContent = '🎉 最新在线报告已通过 CDN 校验，正在为您无缓存热更新页面！';
+                                        bar.style.width = "100%";
+                                        cdNum.textContent = "0";
+                                        setTimeout(() => {{
+                                            document.open();
+                                            document.write(htmlText);
+                                            document.close();
+                                            window.history.replaceState(null, '', cleanUrl + '?v=' + Date.now());
+                                        }}, 800);
+                                    }}
                                 }}
                             }}
                         }}
                     }} catch (err) {{
-                        // 静默失败，继续依靠本地倒计时
+                        // 静默失败，继续依靠倒计时
                     }}
                 }}, 4000);
-            }}, 18000);
+            }}, 22000);
         }}
     </script>
 </body>

@@ -65,7 +65,7 @@ class WeChatNotifier:
                 lines.append(
                     f"#### ⭐ TOP {rank}：{st['name']} ({st['code']}) · 评分 `{st['score']}分`\n"
                     f"- **盘口表现**：现价 **¥{st['price']:.2f}** ({sign}{st['change_pct']:.2f}%) | 换手 {st['turnover_pct']}% | 动态量比 {st['vol_ratio']}倍\n"
-                    f"- **🟢 低吸区间**：`¥{st['buy_range']}` (严禁高于现价追涨)\n"
+                    f"- **🟢 低吸区间**：`¥{st['buy_range']}` | **执行指令**：{st.get('buy_tip', '')}\n"
                     f"- **🎯 第一止盈**：`¥{st['target_price']:.2f}` (+{st['target_pct']}%) · 预计赚 +¥{st['expected_profit_rmb']}\n"
                     f"- **🛑 严格止损**：`¥{st['stop_loss_price']:.2f}` ({st['stop_loss_pct']}%) · 最多亏 -¥{st['max_loss_rmb']}\n"
                     f"- **💰 仓位建议**：{st['suggest_pos']}\n"

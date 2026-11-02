@@ -61,7 +61,7 @@ def load_local_portfolio():
     return None
 
 
-def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_COUNT, auto_open=True, push_wechat=False):
+def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_COUNT, auto_open=True, push_wechat=False, morning_sniper=False):
     now_dt = datetime.now(BEIJING_TZ)
     report_time_str = now_dt.strftime("%Y年%m月%d日 %H:%M")
 
@@ -141,7 +141,7 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
         sign = "+" if st['change_pct'] >= 0 else ""
         safe_print(f"\n  ⭐ TOP {rank}: {st['name']} ({st['code']}) - 严选评分: {st['score']}分")
         safe_print(f"     现价: ¥{st['price']:.2f} ({sign}{st['change_pct']:.2f}%) | 换手率: {st['turnover_pct']}% | 动态量比: {st['vol_ratio']}倍 | 成交: {st['amount_yi']}亿")
-        safe_print(f"     🟢 建议低吸区间: ¥{st['buy_range']} (严禁高于现价追高)")
+        safe_print(f"     🟢 理想低吸区间: ¥{st['buy_range']} | {st.get('buy_tip', '')}")
         safe_print(f"     🎯 第一止盈目标: ¥{st['target_price']:.2f} (+{st['target_pct']}%) | 🛑 严格止损红线: ¥{st['stop_loss_price']:.2f} ({st['stop_loss_pct']}%)")
         safe_print(f"     ⚖️ 盈亏比: {st['risk_reward_ratio']}:1 | 仓位指引: {st['suggest_pos']}")
 
@@ -158,8 +158,32 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
     safe_print(f"📄 本地报告路径: {html_file}")
     safe_print("=" * 70)
 
-    # 若指定了 --push-wechat（如本地 14:30 计划任务），准时向手机微信发送综合决策战报
-    if push_wechat:
+    # 若为早盘 10:15 狙击手模式 (--morning-sniper)，仅在“大盘多头共振 + 仓位未满 + >=90分温和启动极品”时才触发微信推送
+    if morning_sniper:
+        up_idx_cnt = sum(1 for idx in indices if idx['change_pct'] > 0)
+        sh_up = any(idx['code'] == '000001' and idx['change_pct'] >= 0 for idx in indices)
+        min_sc = getattr(config, 'MORNING_SNIPER_MIN_SCORE', 90.0)
+        min_chg = getattr(config, 'MORNING_SNIPER_MIN_CHANGE', 1.8)
+        max_chg = getattr(config, 'MORNING_SNIPER_MAX_CHANGE', 4.8)
+
+        sniper_picks = [
+            st for st in top_recommendations
+            if st['score'] >= min_sc and (min_chg <= st['change_pct'] <= max_chg)
+        ][:2]
+
+        if not is_cb and up_idx_cnt >= 3 and sh_up and holdings_count < config.MAX_HOLDINGS and sniper_picks:
+            safe_print(f"🎯 [早盘极品狙击触发] 大盘多头共振且发现 {len(sniper_picks)} 只 >=90分启动期极品，正在推送微信...")
+            notifier = WeChatNotifier()
+            notifier.send_push(
+                indices,
+                sniper_picks,
+                report_time_str + " (早盘狙击专报)",
+                holdings_diag=holdings_diag,
+                circuit_breaker=(is_cb, cb_reason)
+            )
+        else:
+            safe_print("🛡️ [早盘狙击静默] 当前未同时满足“大盘全红共振 + 未满仓 + >=90分温和启动极品”，早盘保持静默不打扰，静候 14:30 尾盘主力战报。")
+    elif push_wechat:
         safe_print("📲 正在向您的微信推送【持仓体检 + 尾盘严选】综合战报...")
         notifier = WeChatNotifier()
         notifier.send_push(
@@ -183,9 +207,11 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
 if __name__ == '__main__':
     should_open = '--no-open' not in sys.argv
     should_push = '--push-wechat' in sys.argv
+    is_sniper = '--morning-sniper' in sys.argv
     run_pipeline(
         scan_count=config.SCAN_POOL_COUNT,
         top_k=config.TOP_RECOMMEND_COUNT,
         auto_open=should_open,
-        push_wechat=should_push
+        push_wechat=should_push,
+        morning_sniper=is_sniper
     )

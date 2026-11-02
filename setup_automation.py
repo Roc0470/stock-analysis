@@ -112,7 +112,13 @@ $trigger1 = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesda
 $settings1 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 Register-ScheduledTask -TaskName "AShare_Monitor_0925" -Action $action1 -Trigger $trigger1 -Settings $settings1 -Description "A股实盘持仓毫秒级静默盯盘与移动锁利守护 (交易日09:25自启)" -Force | Out-Null
 
-# 2. 周一至周五 14:30 尾盘黄金窗口选股 + 持仓体检微信推送任务
+# 2. 周一至周五 10:15 早盘条件狙击手任务 (仅在大盘全红+未满仓+>=90分温和启动极品时才推微信，否则静默)
+$action_sniper = New-ScheduledTaskAction -Execute '{PYTHONW_EXE}' -Argument '"{os.path.join(BASE_DIR, "main.py")}" --no-open --morning-sniper' -WorkingDirectory '{BASE_DIR}'
+$trigger_sniper = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 10:15AM
+$settings_sniper = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+Register-ScheduledTask -TaskName "AShare_Radar_1015_Sniper" -Action $action_sniper -Trigger $trigger_sniper -Settings $settings_sniper -Description "A股10:15早盘极品条件狙击扫描 (严苛条件触发，防诱多噪音)" -Force | Out-Null
+
+# 3. 周一至周五 14:30 尾盘黄金窗口选股 + 持仓体检微信推送任务
 $action2 = New-ScheduledTaskAction -Execute '{PYTHONW_EXE}' -Argument '"{os.path.join(BASE_DIR, "main.py")}" --no-open --push-wechat' -WorkingDirectory '{BASE_DIR}'
 $trigger2 = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 14:30
 $settings2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
@@ -126,7 +132,7 @@ Write-Output "TASKS_REGISTERED_OK"
         text=True
     )
     if "TASKS_REGISTERED_OK" in res.stdout:
-        print("  ✓ Windows 任务计划已成功注册：[AShare_Monitor_0925] 与 [AShare_Radar_1430]。")
+        print("  ✓ Windows 任务计划已成功注册：[AShare_Monitor_0925]、[AShare_Radar_1015_Sniper] 与 [AShare_Radar_1430]。")
     else:
         print(f"  ⚠️ PowerShell 注册返回提示: {res.stderr.strip() or res.stdout.strip()}")
 

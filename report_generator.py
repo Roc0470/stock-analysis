@@ -315,11 +315,12 @@ class ReportGenerator:
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                         <!-- 买入区间 -->
                         <div class="bg-slate-800/80 rounded-lg p-2.5 border border-emerald-500/30">
-                            <div class="text-emerald-400 font-bold mb-1 flex items-center gap-1">
-                                <span>🟢</span><span>建议买入区间</span>
+                            <div class="text-emerald-400 font-bold mb-1 flex items-center justify-between">
+                                <span class="flex items-center gap-1"><span>🟢</span><span>理想低吸区间</span></span>
+                                <span class="text-[11px] text-amber-300 font-mono">红线≤¥{st.get('max_chase_price', st['price'])}</span>
                             </div>
                             <div class="text-sm font-bold font-mono text-white">¥{st['buy_range']}</div>
-                            <div class="text-[11px] text-slate-400 mt-1">分批低吸回踩，切忌盘初急追高</div>
+                            <div class="text-[11px] text-slate-300 mt-1">{st.get('buy_tip', '超红线坚决放弃不追')}</div>
                         </div>
 
                         <!-- 目标止盈 -->

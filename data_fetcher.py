@@ -171,8 +171,8 @@ class AShareDataFetcher:
             code = st['code']
             name = st['name']
 
-            # 1. 过滤 ST 和退市风险股
-            if 'ST' in name or '*ST' in name or '退' in name:
+            # 1. 过滤 ST、退市风险股及低弹性银行股
+            if 'ST' in name or '*ST' in name or '退' in name or '银行' in name:
                 continue
 
             # 2. 板块权限过滤：新手默认只选沪深主板
@@ -193,22 +193,24 @@ class AShareDataFetcher:
             if trade <= 0 or open_p <= 0:
                 continue
 
-            # 3. 过滤股价区间 (3.5 ~ 35.0 元)
-            if not (config.MIN_STOCK_PRICE <= trade <= config.MAX_STOCK_PRICE):
+            # 3. 过滤股价区间 (3.5 ~ 35.0 元) 与流通市值上限 (<= 700 亿元中盘活跃股)
+            nmc_yi = round(float(st.get('nmc', 0) or 0) / 10000, 1)
+            max_nmc = getattr(config, 'MAX_NMC_YI', 700.0)
+            if not (config.MIN_STOCK_PRICE <= trade <= config.MAX_STOCK_PRICE) or (nmc_yi > max_nmc):
                 stats['filtered_price'] += 1
                 continue
 
             change_pct = float(st.get('changepercent', 0) or 0)
             amount_yi = round(float(st.get('amount', 0) or 0) / 1e8, 2)
             turnover_pct = round(float(st.get('turnoverratio', 0) or 0), 2)
-            nmc_yi = round(float(st.get('nmc', 0) or 0) / 10000, 1)
+            projected_turnover = round(turnover_pct / progress, 2)
             pe_ratio = round(float(st.get('per', 0) or 0), 1)
 
             if amount_yi < min_amount_dynamic:
                 continue
 
-            # 4. 换手率过滤（下限支持盘中折算，上限严守 22% 防死亡换手）
-            if not (min_turnover_dynamic <= turnover_pct <= config.MAX_TURNOVER_PCT):
+            # 4. 换手率过滤：按全天等效换手率考核 (>= 3.0%)，且实际换手 <= 22% 防死亡换手
+            if projected_turnover < config.MIN_TURNOVER_PCT or turnover_pct > config.MAX_TURNOVER_PCT:
                 stats['filtered_turnover'] += 1
                 continue
 

@@ -320,10 +320,28 @@ class ShortTermTrendStrategy:
         score = round(min(max(score, 65.0), 96.8), 1)
 
         # ================= 第四层：ATR 动态买卖点与仓位联动精算 =================
-        buy_low = round(max(ma5 * 0.998, close - 0.55 * atr, close * 0.978), 2)
-        buy_high = round(close, 2)
-        if buy_low >= buy_high:
-            buy_low = round(close * 0.985, 2)
+        # 科学锚定当日安全买点天花板（基于昨收 +5.2% 与 5日线/ATR 支撑，绝不随盘中拉高而无脑上移买点！）
+        prev_close_val = float(prev['close']) if prev['close'] > 0 else close / (1 + stock_info['change_pct'] / 100.0)
+        safe_ceiling = round(min(prev_close_val * 1.052, max(ma5 * 1.035, open_p + 0.9 * atr)), 2)
+
+        if close <= safe_ceiling:
+            # 当前现价仍在安全启动买点内（涨幅温和），可直接买
+            buy_high = round(close, 2)
+            buy_low = round(max(ma5 * 0.998, close - 0.5 * atr, prev_close_val * 1.005), 2)
+            if buy_low >= buy_high:
+                buy_low = round(buy_high * 0.985, 2)
+            max_chase_price = round(min(close * 1.006, safe_ceiling), 2)
+            buy_status = "in_zone"
+            buy_tip = f"✅ 现价正处买点内 (≤¥{max_chase_price:.2f} 均可一笔上车)"
+        else:
+            # 当前现价已冲高脱离安全买点（如已涨 6%~7%+），锁定回踩低吸上限，严禁现价追高！
+            buy_high = safe_ceiling
+            buy_low = round(max(ma5 * 1.002, safe_ceiling - 0.45 * atr, prev_close_val * 1.015), 2)
+            if buy_low >= buy_high:
+                buy_low = round(buy_high * 0.985, 2)
+            max_chase_price = safe_ceiling
+            buy_status = "wait_pullback"
+            buy_tip = f"⚠️ 现价已脱离买点！严禁追高，仅限挂单等回落 ≤¥{max_chase_price:.2f} 低吸"
 
         atr_stop = close - 1.5 * atr
         support_stop = max(ma10 * 0.99, ma20 * 0.995)
@@ -355,8 +373,8 @@ class ShortTermTrendStrategy:
             suggest_pos_desc = f"⚠️ 【已满 {config.MAX_HOLDINGS} 只持仓上限】仅作备选观察，除非先清仓旧股，否则不开新仓！"
         else:
             suggest_pos_desc = (
-                f"买 {suggest_shares}股 ({suggest_lots}手) · 约 ¥{suggest_cost:,.0f} (占本金 {actual_pos_pct}%) "
-                f"| 达标预计赚 +¥{expected_profit_rmb} / 止损最多亏 -¥{max_loss_rmb}"
+                f"一笔买满 {suggest_shares}股 ({suggest_lots}手·约¥{suggest_cost:,.0f}，勿拆单省5元最低佣金) "
+                f"| 达标赚 +¥{expected_profit_rmb} / 止损亏 -¥{max_loss_rmb}"
             )
 
         recent_closes = [round(c, 2) for c in df['close'].tail(15).tolist()]
@@ -376,6 +394,9 @@ class ShortTermTrendStrategy:
             'tags': tags[:4],
             'reasons': reasons,
             'buy_range': f"{buy_low:.2f} ~ {buy_high:.2f}",
+            'max_chase_price': f"{max_chase_price:.2f}",
+            'buy_status': buy_status,
+            'buy_tip': buy_tip,
             'target_price': target_price,
             'target_pct': target_pct,
             'stop_loss_price': stop_loss_price,

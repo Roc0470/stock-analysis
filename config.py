@@ -1,8 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-用户专属交易风控与账户配置 (V2.0 实战严选版)
-针对【入市几个月新手 + 总资金 21,000 元 + A股短线趋势突破】量身定制
+用户专属交易风控与账户配置 (V3.0 全自动实战闭环版)
+针对【总资金 21,000 元 + 沪深主板严选 + 智能移动锁利 + 隐私隔离】量身定制
 """
+import os
+
+def _load_local_env():
+    """原生轻量加载本地私有 .env 配置文件（免第三方库依赖，防止密钥泄露至公开仓库）"""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    env_vars = {}
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    env_vars[k.strip()] = v.strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return env_vars
+
+_LOCAL_ENV = _load_local_env()
 
 # 1. 账户资金与仓位规划 (元)
 TOTAL_CAPITAL = 21000.0
@@ -14,18 +34,15 @@ DEFAULT_POS_RATIO = 0.28
 MAX_HOLDINGS = 2
 
 # 2. 交易权限过滤 (极其重要)
-# 新手开户未满2年、资金未满10万/50万，无法开通创业板(300/301)、科创板(688)和北交所(8/4/92)权限
 # 开启 ONLY_MAIN_BOARD 后，100% 只筛选沪深主板(600/601/603/605/000/001/002/003)，确保每只都能直接下单
 ONLY_MAIN_BOARD = True
 
 # 3. 股价与流动性过滤区间
 MIN_STOCK_PRICE = 3.5     # 剔除低于 3.5 元的垃圾股/面值退市高危股
 MAX_STOCK_PRICE = 35.0    # 剔除高于 35 元的高价股，确保 5000 元预算能灵活买卖 2~10 手
-MIN_AMOUNT_YI = 3.0       # 当日最低成交额 (亿元)，确保流动性充沛
+MIN_AMOUNT_YI = 3.0       # 全天收盘最低成交额基准 (亿元)，盘中扫描会自动按交易时间进度折算
 
 # 4. 换手率黄金区间 (%)
-# < 2.0% 多为银行/水电等死水超级大盘股，短线缺乏爆发力
-# > 22.0% 多为游资高位击鼓传花的“死亡换手”，次日极易闷杀
 MIN_TURNOVER_PCT = 2.0
 MAX_TURNOVER_PCT = 22.0
 
@@ -34,21 +51,18 @@ MIN_DAILY_CHANGE = 0.5    # 当日最低涨幅 (%)，只做当天红盘走强的
 MAX_DAILY_CHANGE = 8.0    # 当日最高涨幅 (%)，不追已经涨停或濒临涨停的票，防次日炸板
 MAX_UPPER_SHADOW = 2.8    # 最大允许上影线比例 (%)，剔除“冲高回落避雷针”诱多出货图形
 
-# 6. 止损与盈亏比底线
-MAX_STOP_LOSS_PCT = -4.8  # 单笔最大硬止损红线 (单笔最大亏损控制在 250 元以内)
-MIN_RISK_REWARD = 1.6     # 最低盈亏比要求 (潜在收益必须 >= 1.6 倍潜在风险)
+# 6. 止损与盈亏比底线 + 大盘冰点熔断阈值
+MAX_STOP_LOSS_PCT = -4.8          # 单笔最大硬止损红线 (单笔最大亏损控制在 250 元以内)
+MIN_RISK_REWARD = 1.6             # 最低盈亏比要求 (潜在收益必须 >= 1.6 倍潜在风险)
+CIRCUIT_BREAKER_DROP_PCT = -1.2   # 大盘冰点熔断红线：当主要指数集体下跌且均幅跌破 -1.2% 时强制触发空仓保护
 
 # 7. 扫描广度与输出数量
-SCAN_POOL_COUNT = 400     # 扫描全市场成交额前 400 名活跃股 (较旧版扩大 5 倍视野)
+SCAN_POOL_COUNT = 400     # 扫描全市场成交额前 400 名活跃股
 TOP_RECOMMEND_COUNT = 5   # 每日严选 TOP 5 精品（宁缺毋滥）
 
-# 8. 微信主动推送配置 (Server酱 Turbo 官方服务号)
-# 盘中一旦触碰止盈止损或出现异动，秒级主动向您的微信发送震动通知
-SERVERCHAN_KEY = "SCT454835Tc06HjmlgGNfw3aSS0IBXY5Iv"
-PUSHPLUS_TOKEN = ""
+# 8. 微信主动推送配置 (从本地私有 .env 或环境变量读取，公开仓库零明文泄露)
+SERVERCHAN_KEY = os.environ.get("SERVERCHAN_KEY") or _LOCAL_ENV.get("SERVERCHAN_KEY", "")
+PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN") or _LOCAL_ENV.get("PUSHPLUS_TOKEN", "")
 
-# 9. 电脑端报警提示音模式
-# 'silent': 纯静音模式 (仅在桌面右下角弹出优雅气泡提示框，不发出任何声音，推荐！)
-# 'soft'  : 柔和轻声 (使用 Windows 原生轻柔的邮件水滴轻音)
-# 'loud'  : 蜂鸣重音
+# 9. 电脑端报警提示音模式 ('silent' 纯静音气泡 | 'soft' 柔和轻声 | 'loud' 蜂鸣重音)
 ALERT_SOUND_MODE = "silent"

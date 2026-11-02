@@ -89,12 +89,108 @@ class ReportGenerator:
         </svg>
         '''
 
-    def generate_html_report(self, indices, recommended_stocks, report_date=None):
-        """生成高颜值独立 HTML 报告"""
+    def _build_holdings_section_html(self, holdings_diag):
+        """生成仅限本地桌面展示的【个人实盘持仓健康度与去留诊断】区块（绝不写入公开 GitHub 报告）"""
+        if holdings_diag is None:
+            return ""
+        if len(holdings_diag) == 0:
+            return '''
+    <section class="mb-8">
+        <div class="bg-slate-800/70 rounded-3xl p-5 border border-emerald-500/30 shadow-xl">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-xl">💼</span>
+                    <h2 class="text-lg font-bold text-white">我的实盘持仓去留体检 (本地私有视图 · 空仓 0 只)</h2>
+                </div>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">100% 现金待命</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-2">当前账户无股票持仓（或尚未通过同花顺 Ctrl+C 同步持仓），本金完全安全，可结合下方严选信号择机尾盘低吸。</p>
+        </div>
+    </section>
+'''
+
+        cards = ""
+        for h in holdings_diag:
+            is_up = h['change_pct'] >= 0
+            c_cls = "text-red-400" if is_up else "text-emerald-400"
+            sign = "+" if is_up else ""
+            p_cls = "text-red-400" if h['profit_rmb'] >= 0 else "text-emerald-400"
+            p_sign = "+" if h['profit_rmb'] >= 0 else ""
+            border_cls = {
+                "danger": "border-red-500/70 bg-red-950/20",
+                "target": "border-amber-400/70 bg-amber-950/20",
+                "warn": "border-orange-500/50 bg-slate-800/90",
+                "strong": "border-emerald-500/40 bg-slate-800/90",
+            }.get(h.get('level', 'normal'), "border-slate-700/70 bg-slate-800/90")
+
+            cards += f'''
+            <div class="rounded-2xl p-4 border {border_cls} shadow-lg flex flex-col gap-3">
+                <div class="flex items-center justify-between border-b border-slate-700/50 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <strong class="text-lg text-white">{h['name']}</strong>
+                        <span class="text-xs text-slate-400 font-mono">({h['code']}) · {h['shares']}股</span>
+                    </div>
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-900/90 text-amber-300 border border-amber-500/30">{h['badge']}</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs bg-slate-900/60 rounded-xl p-3 border border-slate-800">
+                    <div>
+                        <div class="text-slate-400">最新现价</div>
+                        <div class="text-base font-bold font-mono {c_cls} mt-0.5">¥{h['price']:.2f} ({sign}{h['change_pct']:.2f}%)</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400">浮动盈亏</div>
+                        <div class="text-base font-bold font-mono {p_cls} mt-0.5">{p_sign}¥{h['profit_rmb']:.1f}</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400">跨日最高水位</div>
+                        <div class="text-base font-bold font-mono text-slate-200 mt-0.5">¥{h['highest_price']:.2f}</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400">移动止损防守线</div>
+                        <div class="text-base font-bold font-mono text-amber-300 mt-0.5">¥{h['stop_loss']:.2f}</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-400">止盈目标线</div>
+                        <div class="text-base font-bold font-mono text-red-400 mt-0.5">¥{h['take_profit']:.2f}</div>
+                    </div>
+                </div>
+                <div class="text-xs text-slate-200 bg-slate-900/80 rounded-xl p-3 border border-slate-700/50 leading-relaxed">
+                    <strong class="text-amber-400">💡 持仓去留操作指引：</strong>{h['advice']}
+                </div>
+            </div>
+            '''
+
+        return f'''
+    <!-- 本地私有持仓诊断区 -->
+    <section class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xl">💼</span>
+                <h2 class="text-xl font-bold text-white tracking-wide">我的实盘持仓健康度与去留体检 ({len(holdings_diag)}只)</h2>
+            </div>
+            <span class="text-xs px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">🔒 仅本地桌面可见 · 已隔离 GitHub 隐私</span>
+        </div>
+        <div class="grid grid-cols-1 gap-4">
+            {cards}
+        </div>
+    </section>
+'''
+
+    def generate_html_report(self, indices, recommended_stocks, report_date=None, holdings_diag=None, circuit_breaker=(False, "")):
+        """生成高颜值独立 HTML 报告（自动区分公开无隐私版与本地带持仓桌面版）"""
         if report_date is None:
             report_date = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日 %H:%M")
 
+        is_cb, cb_reason = circuit_breaker
         market_env = self.assess_market_temperature(indices)
+        if is_cb:
+            market_env = {
+                "status": "❄️ 冰点空仓熔断 · 严禁开新仓",
+                "color": "#38bdf8",
+                "bg_badge": "bg-sky-500/20 text-sky-300 border-sky-400/50",
+                "advice": cb_reason,
+                "temp_score": 25
+            }
 
         # 构建指数卡片 HTML
         index_cards_html = ""
@@ -345,6 +441,8 @@ class ReportGenerator:
         </div>
     </section>
 
+    <!-- PRIVATE_HOLDINGS_SECTION_PLACEHOLDER -->
+
     <!-- 今日推荐股票区 -->
     <section class="mb-10">
         <div class="flex items-center justify-between mb-4">
@@ -356,7 +454,7 @@ class ReportGenerator:
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {stock_cards_html}
+            {stock_cards_html if stock_cards_html else '<div class="col-span-full bg-slate-800/70 rounded-2xl p-8 border border-emerald-500/30 text-center space-y-2"><div class="text-3xl">🛡️</div><div class="text-lg font-bold text-emerald-400">今日空仓防守保护模式 (0 只达标)</div><p class="text-xs text-slate-300 max-w-xl mx-auto">全市场前 400 只高活跃个股均未通过【五重防诱多排雷】与多头均线检验。弱势行情管住手不亏钱，本身就是战胜全市场 90% 散户的顶级策略！</p></div>'}
         </div>
     </section>
 
@@ -648,23 +746,30 @@ class ReportGenerator:
 </body>
 </html>
 '''
-        # 写入 latest 报告以及按日归档的报告
+        # 1. 生成公共无隐私版 HTML（写入 Git 仓库目录，供 GitHub Pages 部署，100% 不暴露个人持仓）
+        public_html = html.replace("<!-- PRIVATE_HOLDINGS_SECTION_PLACEHOLDER -->", "")
         latest_file = os.path.join(self.output_dir, "daily_report.html")
         date_str = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
         archive_file = os.path.join(self.output_dir, f"report_{date_str}.html")
 
         with open(latest_file, "w", encoding="utf-8") as f:
-            f.write(html)
+            f.write(public_html)
         with open(archive_file, "w", encoding="utf-8") as f:
-            f.write(html)
+            f.write(public_html)
 
-        # 同步生成并更新到 Windows 桌面（方便用户在桌面直接双击查看）
+        # 2. 生成本地专属全功能版 HTML（包含个人实盘持仓去留体检，仅写入本地桌面与已忽略的 local_latest.html）
+        private_section = self._build_holdings_section_html(holdings_diag)
+        local_html = html.replace("<!-- PRIVATE_HOLDINGS_SECTION_PLACEHOLDER -->", private_section)
+        local_archive = os.path.join(self.output_dir, "local_latest.html")
+        with open(local_archive, "w", encoding="utf-8") as f:
+            f.write(local_html)
+
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        desktop_file = latest_file
+        desktop_file = local_archive
         if os.path.exists(desktop_path):
             desktop_file = os.path.join(desktop_path, "今日A股短线雷达.html")
             with open(desktop_file, "w", encoding="utf-8") as f:
-                f.write(html)
+                f.write(local_html)
 
         return os.path.abspath(desktop_file)
 

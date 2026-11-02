@@ -2,4 +2,10 @@
 __pycache__/
 *.pyc
 *.log
+*.pid
+*.lock
+logs/
 .DS_Store
+.env
+portfolio.json
+reports/local_*.html

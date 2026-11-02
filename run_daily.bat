@@ -1,24 +1,17 @@
 @echo off
-cd /d "%~dp0"
-chcp 65001 > nul
+title A-Share Daily Quant Radar V3.0
+cd /d "D:\stock analysis"
 cls
-
 echo =========================================================
-echo    [A-Share Daily Radar] Starting Quantitative Scan...
+echo    [Daily Quant Radar V3.0] Running Market Scan...
 echo =========================================================
 echo.
-
-if not exist ".venv\Scripts\python.exe" (
-    echo [ERROR] Virtual environment not found in .venv!
+if not exist "D:\stock analysis\.venv\Scripts\python.exe" (
+    echo [ERROR] Python venv not found!
     pause
     exit /b 1
 )
-
-".venv\Scripts\python.exe" main.py
-
+"D:\stock analysis\.venv\Scripts\python.exe" -u "D:\stock analysis\main.py"
 echo.
-echo =========================================================
-echo  [Finished] Analysis report has been opened in browser!
-echo  Press any key to close this window...
-echo =========================================================
+echo [Finished] Report updated on Desktop! Press any key to close...
 pause > nul

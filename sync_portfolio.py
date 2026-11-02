@@ -1,21 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-同花顺持仓一键智能同步器 (Tonghuashun Portfolio Syncer)
-功能：
-1. 自动从 Windows 剪贴板提取同花顺持仓列表数据；
-2. 过滤已清仓股票（股数为0），保留活跃持仓，精确提取成本价、持股数、现价；
-3. 更新到本地 portfolio.json，并热重载到 realtime_monitor 盯盘机器人中；
-4. 发送系统通知与微信确认。
+同花顺持仓一键智能同步器 (V3.0 智能记忆与 ATR 定锚版)
+核心升级：
+1. 老持仓记忆锁死：再次复制同步时仅更新股数与参考成本，严格保留已锁定的止盈线、移动止损线与跨日最高水位，彻底杜绝目标价随现价被动漂移！
+2. 新持仓 ATR 定锚：首次新买入的股票自动拉取 60 日 K 线测算 ATR(14) 真实波幅与均线支撑，生成科学初始止盈止损位。
+3. 自动过滤国债逆回购、标准券与已清仓股票（0股）。
 """
-import sys
 import os
+import sys
 import re
 import json
 import requests
 from datetime import datetime, timezone, timedelta
 
+if hasattr(sys.stdout, 'reconfigure') and sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(line_buffering=True, encoding='utf-8')
+    except Exception:
+        pass
+
 BEIJING_TZ = timezone(timedelta(hours=8))
-PORTFOLIO_FILE = os.path.join(os.path.dirname(__file__), "portfolio.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PORTFOLIO_FILE = os.path.join(BASE_DIR, "portfolio.json")
+
 
 def get_clipboard_text():
     """读取 Windows 剪贴板文本"""
@@ -30,17 +37,36 @@ def get_clipboard_text():
             text = win32clipboard.GetClipboardData(win32con.CF_TEXT).decode('gbk', errors='ignore')
         win32clipboard.CloseClipboard()
         return text
-    except Exception as e:
-        print(f"[提示] 读取剪贴板失败: {e}")
+    except Exception:
         return ""
 
-def parse_ths_table(text):
-    """解析同花顺持仓网格表格数据"""
+
+def load_existing_map():
+    """读取本地既有持仓配置字典，用于继承既有止盈止损与历史最高水位"""
+    if os.path.exists(PORTFOLIO_FILE):
+        try:
+            with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return {str(item.get('code')): item for item in data if item.get('code')}
+        except Exception:
+            pass
+    return {}
+
+
+def parse_ths_table(text, existing_map=None):
+    """解析同花顺持仓网格表格数据，区分【老仓锁死继承】与【新仓ATR定锚】"""
     if not text or ('证券代码' not in text and '股票代码' not in text):
         return None
 
+    existing_map = existing_map if existing_map is not None else load_existing_map()
+    fetcher = None
+    strategy_cls = None
+
     lines = text.strip().split('\n')
     holdings = []
+    now_str = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
     for line in lines:
         parts = [p.strip() for p in line.split('\t') if p.strip()]
         code_idx = None
@@ -52,88 +78,112 @@ def parse_ths_table(text):
         if code_idx is not None and len(parts) > code_idx + 6:
             code = parts[code_idx]
             name = parts[code_idx + 1]
-            # 仅监控 A股 股票 (60/68/00/30开头)，自动过滤国债逆回购、标准券、基金质押等
+            # 仅监控沪深 A 股股票，过滤标准券、逆回购、场内货币基金等
             if not re.match(r'^(60|68|00|30)\d{4}$', code) or any(k in name for k in ['标准券', '回购', '质押', '国债']):
                 continue
 
             try:
                 shares = int(float(parts[code_idx + 2]))
-                # 只有未清仓（股数 > 0）的才是有效持仓
-                if shares > 0:
-                    cost = float(parts[code_idx + 5])
-                    market_p = float(parts[code_idx + 6])
-                    prefix = 'sh' if code.startswith(('60', '68')) else 'sz'
-                    
-                    # 智能计算风控底线与止盈目标：
-                    # 1. 止损线：若持仓有大幅浮盈（比如卖出后成本摊薄或大幅冲高），设动态移动保本线；否则设成本线或5%硬止损
-                    if market_p > cost * 1.05:
-                        # 利润保护线：设在现价回撤 4% 处，且绝不低于真实成本
-                        stop_loss = round(max(cost, market_p * 0.96), 2)
-                    elif market_p > cost * 1.01:
-                        stop_loss = round(cost, 2)
-                    else:
-                        stop_loss = round(cost * 0.952, 2)
+                if shares <= 0:
+                    continue
 
-                    # 2. 止盈线：目标价必须高于当前现价！
-                    # 避免因减仓盈利导致成本大幅摊薄后，计算出的成本*1.08反而在现价下方而误触发报警
-                    take_profit = round(max(cost * 1.08, market_p * 1.03), 2)
-                    # 如果原持仓已有更高的目标设定，尽量保留
-                    if code == '600741': # 华域汽车底仓
-                        take_profit = max(take_profit, 16.50)
-                        stop_loss = max(stop_loss, 15.90)
+                cost = float(parts[code_idx + 5])
+                market_p = float(parts[code_idx + 6])
+                prefix = 'sh' if code.startswith(('60', '68')) else 'sz'
+                symbol = f"{prefix}{code}"
 
-                    holdings.append({
-                        'symbol': f"{prefix}{code}",
-                        'code': code,
-                        'name': name,
-                        'shares': shares,
-                        'cost': cost,
-                        'market_price': market_p,
-                        'stop_loss': stop_loss,
-                        'take_profit': take_profit,
-                        'updated_at': datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    })
+                if code in existing_map:
+                    # 【老持仓】：严格继承既有止损线、止盈线与跨日最高水位，杜绝目标价乱漂移！
+                    old = existing_map[code]
+                    stop_loss = float(old.get('stop_loss', round(cost * 0.952, 2)))
+                    take_profit = float(old.get('take_profit', round(max(cost * 1.08, market_p * 1.05), 2)))
+                    highest_price = round(max(float(old.get('highest_price', 0.0)), market_p, cost), 2)
+                    warn_pullback = float(old.get('warn_pullback', 2.5))
+                    sync_tag = "继承既有风控"
+                else:
+                    # 【首次新买入持仓】：自动拉取 60日 K 线测算 ATR(14) 初始科学止盈止损
+                    if fetcher is None:
+                        from data_fetcher import AShareDataFetcher
+                        from strategy_engine import ShortTermTrendStrategy
+                        fetcher = AShareDataFetcher()
+                        strategy_cls = ShortTermTrendStrategy
+
+                    df_kline = fetcher.get_stock_kline(symbol, days=60)
+                    stop_loss, take_profit = strategy_cls.calc_initial_atr_stops(df_kline, cost, market_p)
+                    highest_price = round(max(cost, market_p), 2)
+                    warn_pullback = 2.5
+                    sync_tag = "新仓ATR定锚"
+
+                holdings.append({
+                    'symbol': symbol,
+                    'code': code,
+                    'name': name,
+                    'shares': shares,
+                    'cost': cost,
+                    'market_price': market_p,
+                    'highest_price': highest_price,
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'warn_pullback': warn_pullback,
+                    'sync_mode': sync_tag,
+                    'updated_at': now_str
+                })
             except Exception:
                 continue
 
     return holdings
 
+
 def sync_now(custom_text=None):
-    text = custom_text or get_clipboard_text()
-    holdings = parse_ths_table(text)
-    
-    if not holdings:
-        print("❌ 未在剪贴板中检测到有效的同花顺持仓数据！")
+    text = custom_text if custom_text is not None else get_clipboard_text()
+    existing_map = load_existing_map()
+    holdings = parse_ths_table(text, existing_map=existing_map)
+
+    if holdings is None:
+        print("❌ 未在剪贴板中检测到有效的同花顺持仓表格数据！")
         print("💡 正确操作方法：")
-        print("   1. 打开同花顺电脑客户端的【持仓】界面；")
-        print("   2. 在持仓表格里按【Ctrl + A】全选，然后按【Ctrl + C】复制（或者鼠标右键点复制）；")
-        print("   3. 再次运行本程序，即可一秒完成自动同步！")
+        print("   1. 打开同花顺客户端【持仓】界面；")
+        print("   2. 在持仓列表按【Ctrl + C】复制；")
+        print("   3. 后台盯盘机器人会自动秒级静默同步（也可再次运行本脚本）。")
         return False
 
-    # 写入 portfolio.json
     with open(PORTFOLIO_FILE, "w", encoding="utf-8") as f:
         json.dump(holdings, f, ensure_ascii=False, indent=2)
 
-    print("=" * 60)
-    print("🎉 同花顺持仓已成功与 AI 大脑和盯盘机器人实时同步！")
-    print(f"📊 同步时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    print("=" * 66)
+    print("🎉 同花顺实盘持仓已成功同步！(老仓锁死防漂移 · 新仓ATR科学定锚)")
+    print(f"📊 同步时间: {datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')} | 当前活跃持仓: {len(holdings)} 只")
+    print("=" * 66)
     for h in holdings:
-        print(f"  • {h['name']} ({h['code']}): 持仓 {h['shares']}股 | 成本: ¥{h['cost']:.3f} | 现价: ¥{h['market_price']} | 止损线: ¥{h['stop_loss']}")
-    print("=" * 60)
+        print(
+            f"  • {h['name']} ({h['code']}) [{h['sync_mode']}]: {h['shares']}股 | 成本: ¥{h['cost']:.3f} "
+            f"| 现价: ¥{h['market_price']:.2f} | 防守线: ¥{h['stop_loss']:.2f} | 止盈线: ¥{h['take_profit']:.2f}"
+        )
+    print("=" * 66)
 
-    # 尝试发送微信同步确认
+    # 发送微信同步确认
     try:
         import config
         sct_key = getattr(config, 'SERVERCHAN_KEY', '')
         if sct_key:
-            msg_lines = [f"- **{h['name']} ({h['code']})**：持仓 {h['shares']}股，成本 ¥{h['cost']:.3f}，保本止损线 ¥{h['stop_loss']}" for h in holdings]
-            desp = "### 同花顺实盘持仓自动同步成功！\n\n" + "\n".join(msg_lines) + "\n\n🤖 毫秒级盯盘机器人已根据新持仓实时启动守护。"
-            requests.post(f"https://sctapi.ftqq.com/{sct_key}.send", data={'title': '【持仓同步完成】AI 已掌握最新账户持仓', 'desp': desp}, timeout=5)
+            if holdings:
+                msg_lines = [
+                    f"- **{h['name']} ({h['code']})** `[{h['sync_mode']}]`：{h['shares']}股 | 成本 ¥{h['cost']:.3f} | 防守线 **¥{h['stop_loss']:.2f}** | 目标价 **¥{h['take_profit']:.2f}**"
+                    for h in holdings
+                ]
+                desp = "### 📋 同花顺实盘持仓同步成功\n\n" + "\n".join(msg_lines) + "\n\n🤖 毫秒级盯盘机器人已按上述锁定风控线实时护航。"
+            else:
+                desp = "### 📋 同花顺实盘持仓已全部清仓（当前空仓 0 只）\n\n🤖 盯盘机器人进入空仓待命状态。"
+            requests.post(
+                f"https://sctapi.ftqq.com/{sct_key}.send",
+                data={'title': f'【持仓同步完成】当前活跃持仓 {len(holdings)} 只', 'desp': desp},
+                timeout=5
+            )
     except Exception:
         pass
 
     return True
+
 
 if __name__ == '__main__':
     sync_now()

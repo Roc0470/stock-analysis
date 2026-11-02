@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-A股市场行情与技术数据获取模块 (V2.0 实战严选版)
-支持多页全市场高流动性扫描、主板权限过滤、换手率与日内防诱多初筛
+A股市场行情与技术数据获取模块 (V3.0 实战闭环版)
+支持：
+1. 盘中动态时间进度折算（解决早盘/盘中扫描成交额与量比严重偏低误杀好票的问题）
+2. 实时行情 Bar 自动拼接历史日K线（解决新浪日K接口盘中不包含当日实时K线的底层盲区）
+3. 批量持仓实时快照抓取（供持仓健康度诊断与首次买入 ATR 科学定锚使用）
 """
+from datetime import datetime, timezone, timedelta
 import requests
 import pandas as pd
-import numpy as np
 import config
+
+BEIJING_TZ = timezone(timedelta(hours=8))
+
 
 class AShareDataFetcher:
     def __init__(self):
@@ -17,6 +23,35 @@ class AShareDataFetcher:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://finance.sina.com.cn/'
         }
+
+    @staticmethod
+    def get_intraday_progress_ratio():
+        """
+        计算当前盘中交易时间进度折算系数 (0.22 ~ 1.0)
+        用于动态校准盘中未收盘时的成交额门槛与全天预计成交量（动态量比）。
+        非交易日、盘前(<09:30)或收盘后(>=15:00)均返回 1.0。
+        """
+        now = datetime.now(BEIJING_TZ)
+        if now.weekday() >= 5:
+            return 1.0
+        hm = now.hour * 60 + now.minute
+        open_am = 9 * 60 + 30    # 09:30
+        close_am = 11 * 60 + 30  # 11:30
+        open_pm = 13 * 60        # 13:00
+        close_pm = 15 * 60       # 15:00
+
+        if hm < open_am or hm >= close_pm:
+            return 1.0
+        elif hm <= close_am:
+            elapsed = hm - open_am
+        elif hm < open_pm:
+            elapsed = 120  # 午间休市已完成半天 120 分钟
+        else:
+            elapsed = 120 + (hm - open_pm)
+
+        # A股早盘前半小时交投最密集，适度赋予 1.18 倍早盘活跃权重，下限保底 0.22
+        raw_ratio = (elapsed / 240.0) * 1.18
+        return round(min(1.0, max(0.22, raw_ratio)), 3)
 
     def get_market_indices(self):
         """获取大盘主要指数行情（上证、深证、创业板、科创50）"""
@@ -49,14 +84,57 @@ class AShareDataFetcher:
             print(f"[警告] 获取大盘指数失败: {e}")
         return indices
 
+    def get_realtime_quotes(self, symbols):
+        """批量拉取指定股票代码的实时盘口快照"""
+        if not symbols:
+            return {}
+        progress = self.get_intraday_progress_ratio()
+        url = f"http://hq.sinajs.cn/list={','.join(symbols)}"
+        result = {}
+        try:
+            r = self.session.get(url, headers=self.headers, timeout=6)
+            r.encoding = 'gbk'
+            for line in r.text.strip().split('\n'):
+                if '=' not in line:
+                    continue
+                sym = line.split('=')[0].split('_')[-1]
+                data = line.split('=')[1].strip('" ;\r\n').split(',')
+                if len(data) < 31 or not data[0]:
+                    continue
+                name = data[0]
+                open_p = float(data[1] or 0)
+                prev_close = float(data[2] or 0)
+                cur = float(data[3] or 0)
+                high_p = float(data[4] or 0)
+                low_p = float(data[5] or 0)
+                vol = float(data[8] or 0)
+                amount = float(data[9] or 0)
+                date_str = data[30] if len(data) > 30 and data[30] else datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
+                if cur <= 0 and prev_close > 0:
+                    cur = prev_close
+                pct = round((cur - prev_close) / prev_close * 100, 2) if prev_close > 0 else 0.0
+                result[sym] = {
+                    'symbol': sym,
+                    'code': sym[-6:],
+                    'name': name,
+                    'price': cur,
+                    'open': open_p if open_p > 0 else cur,
+                    'high': high_p if high_p > 0 else cur,
+                    'low': low_p if low_p > 0 else cur,
+                    'prev_close': prev_close,
+                    'volume': vol,
+                    'projected_volume': round(vol / progress, 0),
+                    'amount_yi': round(amount / 1e8, 2),
+                    'change_pct': pct,
+                    'date': date_str
+                }
+        except Exception as e:
+            print(f"[警告] 获取实时快照失败: {e}")
+        return result
+
     def get_active_stocks_pool(self, count=400):
         """
-        分页扫描全市场成交额靠前的活跃个股池，并执行第一层【新手风控与防诱多初筛】：
-        1. 剔除 ST/*ST/退市风险股；
-        2. 严格匹配新手交易权限：仅保留沪深主板(600/601/603/605/000/001/002/003)，剔除创业板(300)、科创板(688)、北交所；
-        3. 股价区间过滤 (3.5 ~ 35.0 元)，适配 21,000 元总资金；
-        4. 换手率过滤 (1.2% ~ 22.0%)，剔除死水银行巨无霸与高位 40%+ 死亡换手出货股；
-        5. 日内K线排雷：剔除“高开低走假阳线/大阴线”与“长上影线避雷针”诱多股。
+        分页扫描全市场成交额靠前的活跃个股池，并执行第一层【新手风控与防诱多初筛】（支持盘中动态时间折算）
         """
         page_size = 80
         pages = max(1, (count + page_size - 1) // page_size)
@@ -72,13 +150,20 @@ class AShareDataFetcher:
             except Exception as e:
                 print(f"[警告] 获取第 {page} 页活跃股票池失败: {e}")
 
+        progress = self.get_intraday_progress_ratio()
+        min_amount_dynamic = round(config.MIN_AMOUNT_YI * progress, 2)
+        min_turnover_dynamic = round(config.MIN_TURNOVER_PCT * progress, 2)
+        today_str = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
+
         active_stocks = []
         stats = {
             'total_scanned': len(raw_stocks),
             'filtered_board': 0,
             'filtered_price': 0,
             'filtered_trap_kline': 0,
-            'filtered_turnover': 0
+            'filtered_turnover': 0,
+            'progress_ratio': progress,
+            'min_amount_used': min_amount_dynamic
         }
 
         for st in raw_stocks:
@@ -90,7 +175,7 @@ class AShareDataFetcher:
             if 'ST' in name or '*ST' in name or '退' in name:
                 continue
 
-            # 2. 板块权限过滤：新手默认只选沪深主板，剔除 300/301(创业板)、688(科创板)、8/4/92(北交所)
+            # 2. 板块权限过滤：新手默认只选沪深主板
             if config.ONLY_MAIN_BOARD:
                 if not code.startswith(('600', '601', '603', '605', '000', '001', '002', '003')):
                     stats['filtered_board'] += 1
@@ -104,6 +189,7 @@ class AShareDataFetcher:
             open_p = float(st.get('open', 0) or 0)
             high_p = float(st.get('high', 0) or 0)
             low_p = float(st.get('low', 0) or 0)
+            vol = float(st.get('volume', 0) or 0)
             if trade <= 0 or open_p <= 0:
                 continue
 
@@ -115,32 +201,28 @@ class AShareDataFetcher:
             change_pct = float(st.get('changepercent', 0) or 0)
             amount_yi = round(float(st.get('amount', 0) or 0) / 1e8, 2)
             turnover_pct = round(float(st.get('turnoverratio', 0) or 0), 2)
-            nmc_yi = round(float(st.get('nmc', 0) or 0) / 10000, 1)  # 流通市值(亿元)
+            nmc_yi = round(float(st.get('nmc', 0) or 0) / 10000, 1)
             pe_ratio = round(float(st.get('per', 0) or 0), 1)
 
-            if amount_yi < config.MIN_AMOUNT_YI:
+            if amount_yi < min_amount_dynamic:
                 continue
 
-            # 4. 换手率过滤：剔除死水巨无霸 (<1.2%) 与高位死亡换手股 (>22%)
-            if not (config.MIN_TURNOVER_PCT <= turnover_pct <= config.MAX_TURNOVER_PCT):
+            # 4. 换手率过滤（下限支持盘中折算，上限严守 22% 防死亡换手）
+            if not (min_turnover_dynamic <= turnover_pct <= config.MAX_TURNOVER_PCT):
                 stats['filtered_turnover'] += 1
                 continue
 
-            # 5. 日内K线形态防诱多过滤 (核心升级！)
-            # (a) 当日涨幅必须在温和走强区间 (0.5% ~ 8.0%)
+            # 5. 日内K线形态防诱多过滤
             if not (config.MIN_DAILY_CHANGE <= change_pct <= config.MAX_DAILY_CHANGE):
                 stats['filtered_trap_kline'] += 1
                 continue
-            # (b) 必须是日内真阳线 (收盘价 >= 开盘价)，彻底杜绝“高开低走瀑布假红盘”(如天娱数科开盘8.83跌到8.15)
             if trade < open_p:
                 stats['filtered_trap_kline'] += 1
                 continue
-            # (c) 拒绝长上影线“避雷针”图形 (上影线 <= 2.8%)
             upper_shadow_pct = (high_p - trade) / trade * 100
             if upper_shadow_pct > config.MAX_UPPER_SHADOW:
                 stats['filtered_trap_kline'] += 1
                 continue
-            # (d) 收盘价必须位于全天波动的上半区，确认为尾盘资金承接有力
             if high_p > low_p and (trade - low_p) / (high_p - low_p) < 0.55:
                 stats['filtered_trap_kline'] += 1
                 continue
@@ -153,9 +235,13 @@ class AShareDataFetcher:
                 'open': open_p,
                 'high': high_p,
                 'low': low_p,
+                'volume': vol,
+                'projected_volume': round(vol / progress, 0),
+                'date': today_str,
                 'change_pct': change_pct,
                 'amount_yi': amount_yi,
                 'turnover_pct': turnover_pct,
+                'projected_turnover_pct': round(turnover_pct / progress, 2),
                 'nmc_yi': nmc_yi,
                 'pe_ratio': pe_ratio,
                 'upper_shadow_pct': round(upper_shadow_pct, 2)
@@ -163,9 +249,9 @@ class AShareDataFetcher:
 
         return active_stocks, stats
 
-    def get_stock_kline(self, symbol, days=60):
+    def get_stock_kline(self, symbol, days=60, realtime_bar=None):
         """
-        获取单只股票的日K线数据（新浪财经官方接口，高稳定无阻断）
+        获取单只股票的日K线数据，并在盘中未收盘时自动拼接当日实时行情 Bar
         """
         url = f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={days}"
         try:
@@ -184,7 +270,27 @@ class AShareDataFetcher:
                     'low': float(item['low']),
                     'volume': float(item['volume'])
                 })
-            df = pd.DataFrame(records)
-            return df
+
+            # 若传入了当日实时行情且新浪历史接口尚未生成今日收盘K线，则无缝拼接今日实时Bar
+            if realtime_bar and realtime_bar.get('price', 0) > 0:
+                rt_date = realtime_bar.get('date')
+                # 仅在工作日或实时成交量 > 0 且日期晚于最后一条历史K线时追加
+                if rt_date and records[-1]['date'] < rt_date and realtime_bar.get('volume', 0) > 0:
+                    records.append({
+                        'date': rt_date,
+                        'open': float(realtime_bar.get('open', realtime_bar['price'])),
+                        'close': float(realtime_bar['price']),
+                        'high': float(realtime_bar.get('high', realtime_bar['price'])),
+                        'low': float(realtime_bar.get('low', realtime_bar['price'])),
+                        'volume': float(realtime_bar.get('projected_volume') or realtime_bar.get('volume', 0))
+                    })
+                elif rt_date and records[-1]['date'] == rt_date:
+                    # 若已包含当日K线则用最新实时价更新末尾行
+                    records[-1]['close'] = float(realtime_bar['price'])
+                    records[-1]['high'] = max(records[-1]['high'], float(realtime_bar.get('high', realtime_bar['price'])))
+                    records[-1]['low'] = min(records[-1]['low'], float(realtime_bar.get('low', realtime_bar['price'])))
+                    records[-1]['volume'] = float(realtime_bar.get('projected_volume') or realtime_bar.get('volume', records[-1]['volume']))
+
+            return pd.DataFrame(records)
         except Exception:
             return None

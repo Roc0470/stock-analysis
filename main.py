@@ -133,7 +133,8 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
         if res is not None:
             evaluated_stocks.append(res)
 
-    evaluated_stocks.sort(key=lambda x: x['score'], reverse=True)
+    # 优先将“✅ 现价正处买点内 (in_zone)”的绿灯可买股排在前面，同组内按严选评分从高到低排序
+    evaluated_stocks.sort(key=lambda x: (1 if x.get('buy_status') == 'in_zone' else 0, x['score']), reverse=True)
     top_recommendations = evaluated_stocks[:top_k]
 
     safe_print(f"\n[5/5] 筛选完毕！共 {len(evaluated_stocks)} 只通过严格多头检验，精选 TOP {len(top_recommendations)}：")

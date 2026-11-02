@@ -320,9 +320,11 @@ class ShortTermTrendStrategy:
         score = round(min(max(score, 65.0), 96.8), 1)
 
         # ================= 第四层：ATR 动态买卖点与仓位联动精算 =================
-        # 科学锚定当日安全买点天花板（基于昨收 +5.2% 与 5日线/ATR 支撑，绝不随盘中拉高而无脑上移买点！）
+        # 科学锚定当日安全买点天花板：
+        # 只要当日涨幅 <= 5.2% 且未过度偏离 5 日均线 (<= 5日线 +6.8% 或昨收 +5.2%)，即视为温和启动可买（绿灯）；
+        # 若当日已暴涨超 5.2% 或严重偏离 5 日均线，则锁死安全上限并标为黄灯（严禁现价追高）！
         prev_close_val = float(prev['close']) if prev['close'] > 0 else close / (1 + stock_info['change_pct'] / 100.0)
-        safe_ceiling = round(min(prev_close_val * 1.052, max(ma5 * 1.035, open_p + 0.9 * atr)), 2)
+        safe_ceiling = round(min(prev_close_val * 1.052, max(ma5 * 1.068, open_p + 1.25 * atr)), 2)
 
         if close <= safe_ceiling:
             # 当前现价仍在安全启动买点内（涨幅温和），可直接买
@@ -334,7 +336,7 @@ class ShortTermTrendStrategy:
             buy_status = "in_zone"
             buy_tip = f"✅ 现价正处买点内 (≤¥{max_chase_price:.2f} 均可一笔上车)"
         else:
-            # 当前现价已冲高脱离安全买点（如已涨 6%~7%+），锁定回踩低吸上限，严禁现价追高！
+            # 当前现价已冲高脱离安全买点（如已涨 5.5%~7%+），锁定回踩低吸上限，严禁现价追高！
             buy_high = safe_ceiling
             buy_low = round(max(ma5 * 1.002, safe_ceiling - 0.45 * atr, prev_close_val * 1.015), 2)
             if buy_low >= buy_high:
@@ -342,6 +344,8 @@ class ShortTermTrendStrategy:
             max_chase_price = safe_ceiling
             buy_status = "wait_pullback"
             buy_tip = f"⚠️ 现价已脱离买点！严禁追高，仅限挂单等回落 ≤¥{max_chase_price:.2f} 低吸"
+            # 对已经飞高脱离买点的股票扣减 8 分“可执行性分”，确保绿灯可买股优先排在榜单前列
+            score = round(max(65.0, score - 8.0), 1)
 
         atr_stop = close - 1.5 * atr
         support_stop = max(ma10 * 0.99, ma20 * 0.995)

@@ -132,26 +132,37 @@ class AShareDataFetcher:
             print(f"[警告] 获取实时快照失败: {e}")
         return result
 
-    def get_active_stocks_pool(self, count=400):
+    def get_active_stocks_pool(self, count=400, start_rank=1):
         """
-        分页扫描全市场成交额靠前的活跃个股池，并执行第一层【新手风控与防诱多初筛】（支持盘中动态时间折算）
+        支持按阶梯区间 [start_rank, start_rank + count - 1] 分页扫描全市场成交额靠前的活跃个股池，
+        并执行第一层【新手风控与防诱多初筛】（支持盘中动态时间折算与 2.0 亿成交额硬底线早停）
         """
         page_size = 80
-        pages = max(1, (count + page_size - 1) // page_size)
+        start_page = max(1, (start_rank - 1) // page_size + 1)
+        pages_needed = max(1, (count + page_size - 1) // page_size)
+        end_page = start_page + pages_needed - 1
         raw_stocks = []
+        progress = self.get_intraday_progress_ratio()
+        min_amount_dynamic = round(config.MIN_AMOUNT_YI * progress, 2)
+        reached_amount_floor = False
 
-        for page in range(1, pages + 1):
+        for page in range(start_page, end_page + 1):
             url = f"http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page={page}&num={page_size}&sort=amount&asc=0&node=hs_a&symbol="
             try:
                 r = self.session.get(url, headers=self.headers, timeout=8)
                 batch = r.json()
-                if batch:
-                    raw_stocks.extend(batch)
+                if not batch:
+                    reached_amount_floor = True
+                    break
+                raw_stocks.extend(batch)
+                # 由于新浪按成交额降序排列，若本页最后一只股票成交额已跌破动态门槛，无需再拉取后续页
+                last_amt_yi = float(batch[-1].get('amount', 0) or 0) / 1e8
+                if last_amt_yi < min_amount_dynamic:
+                    reached_amount_floor = True
+                    break
             except Exception as e:
                 print(f"[警告] 获取第 {page} 页活跃股票池失败: {e}")
 
-        progress = self.get_intraday_progress_ratio()
-        min_amount_dynamic = round(config.MIN_AMOUNT_YI * progress, 2)
         min_turnover_dynamic = round(config.MIN_TURNOVER_PCT * progress, 2)
         today_str = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 
@@ -163,7 +174,8 @@ class AShareDataFetcher:
             'filtered_trap_kline': 0,
             'filtered_turnover': 0,
             'progress_ratio': progress,
-            'min_amount_used': min_amount_dynamic
+            'min_amount_used': min_amount_dynamic,
+            'reached_amount_floor': reached_amount_floor
         }
 
         for st in raw_stocks:

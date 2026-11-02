@@ -319,15 +319,17 @@ class ShortTermTrendStrategy:
 
         score = round(min(max(score, 65.0), 96.8), 1)
 
-        # ================= 第四层：ATR 动态买卖点与仓位联动精算 =================
-        # 科学锚定当日安全买点天花板：
-        # 只要当日涨幅 <= 5.2% 且未过度偏离 5 日均线 (<= 5日线 +6.8% 或昨收 +5.2%)，即视为温和启动可买（绿灯）；
-        # 若当日已暴涨超 5.2% 或严重偏离 5 日均线，则锁死安全上限并标为黄灯（严禁现价追高）！
+        # ================= 第四层：ATR 动态买卖点与绿灯甜点区精算 =================
+        # 严格执行您拍板的绿灯甜点区标准：
+        # 1. 当日涨幅在 +1.2% ~ +5.0% 之间；
+        # 2. 换手率在 3.0% ~ 16.0% 之间（已在第一层过滤）；
+        # 3. 现价 <= 安全天花板（昨收*1.05 且不偏离 5日均线 +6.5%）。
         prev_close_val = float(prev['close']) if prev['close'] > 0 else close / (1 + stock_info['change_pct'] / 100.0)
-        safe_ceiling = round(min(prev_close_val * 1.052, max(ma5 * 1.068, open_p + 1.25 * atr)), 2)
+        max_green_chg = getattr(config, 'MAX_GREEN_CHANGE', 5.0)
+        safe_ceiling = round(min(prev_close_val * (1 + max_green_chg / 100.0), max(ma5 * 1.065, open_p + 1.2 * atr)), 2)
 
-        if close <= safe_ceiling:
-            # 当前现价仍在安全启动买点内（涨幅温和），可直接买
+        if close <= safe_ceiling and stock_info['change_pct'] <= max_green_chg:
+            # 当前现价正处于 +1.2% ~ +5.0% 的安全绿灯启动区，可直接一笔买满
             buy_high = round(close, 2)
             buy_low = round(max(ma5 * 0.998, close - 0.5 * atr, prev_close_val * 1.005), 2)
             if buy_low >= buy_high:
@@ -336,7 +338,7 @@ class ShortTermTrendStrategy:
             buy_status = "in_zone"
             buy_tip = f"✅ 现价正处买点内 (≤¥{max_chase_price:.2f} 均可一笔上车)"
         else:
-            # 当前现价已冲高脱离安全买点（如已涨 5.5%~7%+），锁定回踩低吸上限，严禁现价追高！
+            # 当前现价已冲高脱离安全买点（涨超 +5.0%），锁死回踩低吸上限，移入底部黄灯观察区，绝不混入主买榜！
             buy_high = safe_ceiling
             buy_low = round(max(ma5 * 1.002, safe_ceiling - 0.45 * atr, prev_close_val * 1.015), 2)
             if buy_low >= buy_high:
@@ -344,8 +346,6 @@ class ShortTermTrendStrategy:
             max_chase_price = safe_ceiling
             buy_status = "wait_pullback"
             buy_tip = f"⚠️ 现价已脱离买点！严禁追高，仅限挂单等回落 ≤¥{max_chase_price:.2f} 低吸"
-            # 对已经飞高脱离买点的股票扣减 8 分“可执行性分”，确保绿灯可买股优先排在榜单前列
-            score = round(max(65.0, score - 8.0), 1)
 
         atr_stop = close - 1.5 * atr
         support_stop = max(ma10 * 0.99, ma20 * 0.995)

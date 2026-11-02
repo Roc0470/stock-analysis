@@ -108,36 +108,56 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
     else:
         safe_print("\n[2/5] 云端无状态环境：跳过本地私有持仓读取（确保公开页面零隐私泄露）。")
 
-    # 3. 抓取高流动性活跃候选股票池（含盘中动态时间折算）
-    safe_print(f"\n[3/5] 正在扫描全市场成交额前 {scan_count} 名活跃股并执行【五重防诱多排雷】...")
-    raw_pool, stats = fetcher.get_active_stocks_pool(count=scan_count)
-    safe_print(f"  ✓ 全市场扫描: {stats['total_scanned']} 只 | 盘中时间折算系数: {stats['progress_ratio']} (动态成交门槛 >= {stats['min_amount_used']}亿)")
-    safe_print(f"  ✓ 权限与股价过滤: 剔除创业板/科创板 {stats['filtered_board']} 只 | 剔除高价/仙股 {stats['filtered_price']} 只")
-    safe_print(f"  ✓ 诱多图形排雷: 剔除假阳线/长上影避雷针 {stats['filtered_trap_kline']} 只 | 剔除异常换手 {stats['filtered_turnover']} 只")
-    safe_print(f"  ✓ 晋级深度K线实时对齐建模的主板候选股: {len(raw_pool)} 只")
+    # 3 & 4. 阶梯式自适应深潜扫描（先扫前 400 名，若 ✅ 绿灯可买股不足 3 只，自动继续向下扩扫，直至凑齐绿灯股或触及 2.0 亿成交额底线）
+    step_size = getattr(config, 'SCAN_STEP_COUNT', 400)
+    max_scan = getattr(config, 'MAX_SCAN_COUNT', 1600)
+    min_green_target = getattr(config, 'MIN_GREEN_TARGET', 3)
 
-    # 4. 运行短线爆发与趋势跟踪策略模型（实时Bar无缝拼接）
-    safe_print(f"\n[4/5] 正在拼接当日实时K线并计算均线斜率、动态量比、ATR波幅与多因子评分...")
-    evaluated_stocks = []
+    green_stocks = []
+    watch_stocks = []
     holding_codes = {h['code'] for h in (local_holdings or [])}
+    seen_codes = set(holding_codes)
 
-    total = len(raw_pool)
-    for i, stock in enumerate(raw_pool, start=1):
-        if i % 10 == 0 or i == total:
-            safe_print(f"  -> 深度K线建模进度: [{i}/{total}] ...")
-        # 自动过滤已在持仓中的股票，避免重复推荐买同一只
-        if stock['code'] in holding_codes:
-            continue
-        df_kline = fetcher.get_stock_kline(stock['symbol'], days=60, realtime_bar=stock)
-        res = strategy.evaluate_stock(stock, df_kline, holdings_count=holdings_count, is_circuit_breaker=is_cb)
-        if res is not None:
-            evaluated_stocks.append(res)
+    current_start = 1
+    total_raw_scanned = 0
+    while current_start <= max_scan:
+        end_rank = current_start + step_size - 1
+        safe_print(f"\n[3/5] 正在执行阶梯式扫描：第 {current_start}~{end_rank} 名活跃股并执行【五重防诱多排雷】...")
+        raw_pool, stats = fetcher.get_active_stocks_pool(count=step_size, start_rank=current_start)
+        total_raw_scanned += stats['total_scanned']
+        safe_print(f"  ✓ 本轮扫描: {stats['total_scanned']} 只 (累计 {total_raw_scanned} 只) | 动态成交门槛 >= {stats['min_amount_used']}亿")
+        safe_print(f"  ✓ 晋级深度K线实时对齐建模的主板候选股: {len(raw_pool)} 只")
 
-    # 优先将“✅ 现价正处买点内 (in_zone)”的绿灯可买股排在前面，同组内按严选评分从高到低排序
-    evaluated_stocks.sort(key=lambda x: (1 if x.get('buy_status') == 'in_zone' else 0, x['score']), reverse=True)
-    top_recommendations = evaluated_stocks[:top_k]
+        if raw_pool:
+            safe_print(f"[4/5] 正在对本批 {len(raw_pool)} 只候选股拼接实时K线并计算绿灯买点与多因子评分...")
+            for stock in raw_pool:
+                if stock['code'] in seen_codes:
+                    continue
+                seen_codes.add(stock['code'])
+                df_kline = fetcher.get_stock_kline(stock['symbol'], days=60, realtime_bar=stock)
+                res = strategy.evaluate_stock(stock, df_kline, holdings_count=holdings_count, is_circuit_breaker=is_cb)
+                if res is not None:
+                    if res.get('buy_status') == 'in_zone':
+                        green_stocks.append(res)
+                    else:
+                        watch_stocks.append(res)
 
-    safe_print(f"\n[5/5] 筛选完毕！共 {len(evaluated_stocks)} 只通过严格多头检验，精选 TOP {len(top_recommendations)}：")
+        if len(green_stocks) >= min_green_target:
+            safe_print(f"  🎯 已捕获 {len(green_stocks)} 只【✅ 绿灯直接可买股】（达到 >= {min_green_target} 只目标），停止继续下探！")
+            break
+        if stats.get('reached_amount_floor') or stats['total_scanned'] == 0:
+            safe_print(f"  🛑 已触及全市场成交额底线 ({stats['min_amount_used']}亿元)，停止继续下探。")
+            break
+        if current_start + step_size <= max_scan:
+            safe_print(f"  🔍 当前仅发现 {len(green_stocks)} 只绿灯可买股（不足 {min_green_target} 只），自动向下扩扫下一阶梯...")
+        current_start += step_size
+
+    # 主买榜 100% 仅展示 ✅ 绿灯直接可买股（按评分从高到低排序），⚠️ 黄灯股移入底部折叠观察区
+    green_stocks.sort(key=lambda x: x['score'], reverse=True)
+    watch_stocks.sort(key=lambda x: x['score'], reverse=True)
+    top_recommendations = green_stocks[:top_k]
+
+    safe_print(f"\n[5/5] 筛选完毕！累计扫描 {total_raw_scanned} 只活跃股，共捕获 {len(green_stocks)} 只【✅ 绿灯可买股】与 {len(watch_stocks)} 只【⚠️ 黄灯观察股】，主买榜精选 TOP {len(top_recommendations)}：")
     for rank, st in enumerate(top_recommendations, start=1):
         sign = "+" if st['change_pct'] >= 0 else ""
         safe_print(f"\n  ⭐ TOP {rank}: {st['name']} ({st['code']}) - 严选评分: {st['score']}分")
@@ -152,7 +172,8 @@ def run_pipeline(scan_count=config.SCAN_POOL_COUNT, top_k=config.TOP_RECOMMEND_C
         top_recommendations,
         report_date=report_time_str,
         holdings_diag=holdings_diag,
-        circuit_breaker=(is_cb, cb_reason)
+        circuit_breaker=(is_cb, cb_reason),
+        watch_stocks=watch_stocks
     )
     safe_print("\n" + "=" * 70)
     safe_print("🎉 V3.0 可视化分析报告已同步更新至桌面（个人持仓隐私已与公开仓库严格物理隔离）！")
@@ -210,7 +231,7 @@ if __name__ == '__main__':
     should_push = '--push-wechat' in sys.argv
     is_sniper = '--morning-sniper' in sys.argv
     run_pipeline(
-        scan_count=config.SCAN_POOL_COUNT,
+        scan_count=getattr(config, 'SCAN_STEP_COUNT', 400),
         top_k=config.TOP_RECOMMEND_COUNT,
         auto_open=should_open,
         push_wechat=should_push,

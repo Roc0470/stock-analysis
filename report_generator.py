@@ -176,8 +176,8 @@ class ReportGenerator:
     </section>
 '''
 
-    def generate_html_report(self, indices, recommended_stocks, report_date=None, holdings_diag=None, circuit_breaker=(False, "")):
-        """生成高颜值独立 HTML 报告（自动区分公开无隐私版与本地带持仓桌面版）"""
+    def generate_html_report(self, indices, recommended_stocks, report_date=None, holdings_diag=None, circuit_breaker=(False, ""), watch_stocks=None):
+        """生成高颜值独立 HTML 报告（主榜仅展示 ✅ 绿灯直接可买股，已脱离买点的 ⚠️ 黄灯股折叠在底部观察区）"""
         if report_date is None:
             report_date = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日 %H:%M")
 
@@ -191,6 +191,36 @@ class ReportGenerator:
                 "advice": cb_reason,
                 "temp_score": 25
             }
+
+        # 构建底部折叠的黄灯观察区 HTML
+        watch_section_html = ""
+        if watch_stocks:
+            watch_rows = ""
+            for wst in watch_stocks[:5]:
+                watch_rows += f'''
+                <div class="bg-slate-900/70 rounded-xl p-3 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">⚠️ 黄灯禁追</span>
+                        <a href="https://stockpage.10jqka.com.cn/{wst['code']}/" target="_blank" class="font-bold text-white hover:text-amber-300 underline">{wst['name']} ({wst['code']})</a>
+                        <span class="text-red-400 font-mono font-bold">现价 ¥{wst['price']:.2f} (+{wst['change_pct']:.2f}%)</span>
+                        <span class="text-slate-400">评分: {wst['score']}分</span>
+                    </div>
+                    <div class="text-slate-300 font-mono">
+                        安全低吸红线: <strong class="text-emerald-400">≤¥{wst.get('max_chase_price', wst['price'])}</strong> (区间 ¥{wst['buy_range']} · 不回落坚决放弃)
+                    </div>
+                </div>
+                '''
+            watch_section_html = f'''
+            <details class="mt-6 bg-slate-900/50 rounded-2xl border border-slate-800 p-4">
+                <summary class="cursor-pointer text-xs font-bold text-amber-400 flex items-center justify-between select-none">
+                    <span>⚠️ 今日已冲高脱离买点·黄灯观察区 ({len(watch_stocks[:5])}只 —— 涨幅已超 +5.0%，严禁现价追高，点击展开查看回踩挂单价)</span>
+                    <span class="text-slate-500">点击展开/收起 ▼</span>
+                </summary>
+                <div class="mt-3 space-y-2">
+                    {watch_rows}
+                </div>
+            </details>
+            '''
 
         # 构建指数卡片 HTML
         index_cards_html = ""
@@ -444,19 +474,20 @@ class ReportGenerator:
 
     <!-- PRIVATE_HOLDINGS_SECTION_PLACEHOLDER -->
 
-    <!-- 今日推荐股票区 -->
+    <!-- 今日推荐股票区 (100% 绿灯直接可买股，所见即所得) -->
     <section class="mb-10">
         <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
                 <span class="text-xl">🚀</span>
-                <h2 class="text-xl font-bold text-white tracking-wide">今日精选 · 短线爆发与趋势潜力股 ({len(recommended_stocks)}只)</h2>
+                <h2 class="text-xl font-bold text-white tracking-wide">今日精选 · 绿灯可直接建仓潜力股 ({len(recommended_stocks)}只)</h2>
             </div>
-            <span class="text-xs text-slate-400">已自动剔除 ST、冷门无流动性股及高位狂热妖股</span>
+            <span class="text-xs text-emerald-400 font-semibold">✅ 100% 处于 +1.2%~+5.0% 黄金买点内 · 换手 3%~16% · 所见即所得</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {stock_cards_html if stock_cards_html else '<div class="col-span-full bg-slate-800/70 rounded-2xl p-8 border border-emerald-500/30 text-center space-y-2"><div class="text-3xl">🛡️</div><div class="text-lg font-bold text-emerald-400">今日空仓防守保护模式 (0 只达标)</div><p class="text-xs text-slate-300 max-w-xl mx-auto">全市场前 400 只高活跃个股均未通过【五重防诱多排雷】与多头均线检验。弱势行情管住手不亏钱，本身就是战胜全市场 90% 散户的顶级策略！</p></div>'}
+            {stock_cards_html if stock_cards_html else '<div class="col-span-full bg-slate-800/70 rounded-2xl p-8 border border-emerald-500/30 text-center space-y-2"><div class="text-3xl">🛡️</div><div class="text-lg font-bold text-emerald-400">当前暂无绿灯低吸买点标的 (0 只达标)</div><p class="text-xs text-slate-300 max-w-xl mx-auto">经阶梯式深潜扫描全市场成交额 ≥2.0 亿主板活跃股，当前多头标的均已冲高脱离安全买点或未通过防诱多检验。宁可空仓等待，绝不追高接盘！</p></div>'}
         </div>
+        {watch_section_html}
     </section>
 
     <!-- 新手交易军规与避坑秘籍 -->
